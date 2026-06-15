@@ -50,10 +50,6 @@ sl_total <- sl |>
   group_by(start.date) |>
   summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop")
 
-# Colombo only
-colombo <- sl |>
-  filter(district == "Colombo")
-
 # Annual totals by district
 annual_district <- sl |>
   mutate(year = year(start.date)) |>
@@ -67,7 +63,9 @@ top10 <- annual_district |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# Colombo tsibble for STL
+# Colombo for STL and anomaly
+colombo <- sl |> filter(district == "Colombo")
+
 colombo_ts <- colombo |>
   mutate(year_week = yearweek(start.date)) |>
   arrange(year_week) |>
@@ -79,26 +77,25 @@ colombo_stl <- colombo_ts |>
 
 # xts for dygraph
 sl_xts <- xts(sl_total$cases, order.by = sl_total$start.date)
-colombo_xts <- xts(colombo$cases, order.by = colombo$start.date)
 
-# District coordinates for map
+# District coordinates — names exactly match dataset
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
-               "Nuwara Eliya", "Galle", "Matara", "Hambantota",
+               "NuwaraEliya", "Galle", "Matara", "Hambanthota",
                "Jaffna", "Kilinochchi", "Mannar", "Vavuniya", "Mullaitivu",
-               "Batticaloa", "Ampara", "Trincomalee",
+               "Batticaloa", "Ampara", "Kalmune", "Trincomalee",
                "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa",
                "Badulla", "Monaragala", "Ratnapura", "Kegalle"),
   lat = c(6.927, 7.084, 6.585, 7.291, 7.470,
           6.970, 6.054, 5.948, 6.124,
           9.661, 9.395, 8.978, 8.751, 9.267,
-          7.717, 7.284, 8.587,
+          7.717, 7.284, 7.414, 8.587,
           7.486, 8.036, 8.335, 7.939,
           6.989, 6.873, 6.680, 7.253),
   lon = c(79.861, 80.007, 79.960, 80.636, 80.624,
           80.783, 80.221, 80.536, 81.119,
           80.025, 80.399, 79.904, 80.497, 80.812,
-          81.700, 81.672, 81.234,
+          81.700, 81.672, 81.836, 81.234,
           80.362, 79.840, 80.406, 81.000,
           81.056, 81.349, 80.399, 80.349)
 )
@@ -108,6 +105,8 @@ district_totals <- annual_district |>
   summarise(total_cases = sum(annual_cases), .groups = "drop")
 
 map_data <- left_join(district_coords, district_totals, by = "district")
+
+yearly_map_data <- left_join(district_coords, annual_district, by = "district")
 ```
 
 # Overview
@@ -197,66 +196,142 @@ ggplotly(p_top10)
 
 # District Map
 
-## Row
+## Row {.tabset}
+
+### Map by Year
 
 ```{r}
-#| title: "Total Dengue Cases by District"
+#| title: "Dengue Cases by District — Select Year"
+#| message: false
+#| warning: false
 
-leaflet(map_data) |>
+library(crosstalk)
+library(leaflet)
+
+max_cases <- max(yearly_map_data$annual_cases, na.rm = TRUE)
+pal <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
+
+years_list <- sort(unique(yearly_map_data$year))
+
+# build one leaflet map per year, show first by default
+# use leaflet with overlayGroups per year
+
+m <- leaflet() |>
   addTiles() |>
-  addCircleMarkers(
-    lng    = ~lon,
-    lat    = ~lat,
-    radius = ~sqrt(total_cases) / 8,
-    color  = "#c0392b",
-    fillColor = "#e74c3c",
-    fillOpacity = 0.7,
-    popup  = ~paste0(
-      "<b>District:</b> ", district, "<br>",
-      "<b>Total Cases:</b> ", format(total_cases, big.mark = ",")
-    ),
-    label  = ~district
-  ) |>
   setView(lng = 80.7, lat = 7.8, zoom = 7)
+
+for (yr in years_list) {
+  d <- yearly_map_data |> filter(year == yr)
+  m <- m |>
+    addCircleMarkers(
+      data        = d,
+      lng         = ~lon,
+      lat         = ~lat,
+      radius      = ~pmax(sqrt(annual_cases) / 4, 3),
+      color       = ~pal(annual_cases),
+      fillColor   = ~pal(annual_cases),
+      fillOpacity = 0.85,
+      opacity     = 1,
+      popup       = ~paste0("<b>District:</b> ", district,
+                            "<br><b>Year:</b> ", year,
+                            "<br><b>Cases:</b> ", format(annual_cases, big.mark = ",")),
+      label       = ~district,
+      group       = as.character(yr)
+    )
+}
+
+m |>
+  addLayersControl(
+    baseGroups   = as.character(years_list),
+    options      = layersControlOptions(collapsed = FALSE)
+  ) |>
+  addLegend(
+    pal    = pal,
+    values = c(0, max_cases),
+    title  = "Annual Cases"
+  )
 ```
 
-# Colombo Deep Dive
+### Cases by District
+
+```{r}
+#| title: "Annual Cases by District — Animated by Year"
+
+yearly_map_data |>
+  arrange(annual_cases) |>
+  plot_ly(
+    x           = ~annual_cases,
+    y           = ~district,
+    frame       = ~year,
+    type        = "bar",
+    orientation = "h",
+    marker      = list(color = ~annual_cases, colorscale = "Reds"),
+    text        = ~paste0("District: ", district,
+                          "<br>Year: ", year,
+                          "<br>Cases: ", format(annual_cases, big.mark = ",")),
+    hoverinfo   = "text"
+  ) |>
+  layout(
+    xaxis      = list(title = "Annual Cases", tickfont = list(size = 13)),
+    yaxis      = list(
+      title         = "",
+      tickfont      = list(size = 13),
+      categoryorder = "total ascending"
+    ),
+    margin     = list(l = 120, r = 20, t = 30, b = 50),
+    showlegend = FALSE,
+    height     = 600
+  ) |>
+  animation_opts(frame = 800, transition = 400) |>
+  animation_slider(currentvalue = list(prefix = "Year: "))
+```
+
+# District Deep Dive
 
 ## Row {height="50%"}
 
 ### Column {width="50%"}
 
 ```{r}
-#| title: "Colombo — Weekly Cases (Interactive)"
+#| title: "Weekly Cases — All Districts"
 
-dygraph(colombo_xts) |>
-  dyRangeSelector() |>
-  dyOptions(
-    strokeWidth = 1.5,
-    fillGraph   = TRUE,
-    fillAlpha   = 0.15,
-    colors      = "#2980b9"
-  ) |>
-  dyHighlight(highlightSeriesOpts = list(strokeWidth = 2.5))
+p_district_ts <- sl |>
+  ggplot(aes(x = start.date, y = cases,
+             colour = district,
+             text = paste0("District: ", district,
+                           "<br>Date: ", start.date,
+                           "<br>Cases: ", cases))) +
+  geom_line(linewidth = 0.4, alpha = 0.7) +
+  scale_colour_viridis_d(option = "turbo") +
+  labs(x = "Date", y = "Cases", colour = "District") +
+  theme_bw(base_size = 10)
+
+ggplotly(p_district_ts, tooltip = "text")
 ```
 
 ### Column {width="50%"}
 
 ```{r}
-#| title: "Seasonal Plot — Cases by Year"
+#| title: "Seasonal Pattern — All Districts"
 
-p_seasonal <- colombo |>
+p_seasonal_all <- sl |>
   mutate(
-    year = factor(year(start.date)),
-    week = isoweek(start.date)
+    week = isoweek(start.date),
+    year = factor(year(start.date))
   ) |>
-  ggplot(aes(x = week, y = cases, colour = year, group = year)) +
-  geom_line(alpha = 0.65, linewidth = 0.5) +
+  group_by(district, week) |>
+  summarise(cases = mean(cases), .groups = "drop") |>
+  ggplot(aes(x = week, y = cases,
+             colour = district,
+             text = paste0("District: ", district,
+                           "<br>Week: ", week,
+                           "<br>Avg Cases: ", round(cases, 1)))) +
+  geom_line(linewidth = 0.5, alpha = 0.7) +
   scale_colour_viridis_d(option = "turbo") +
-  labs(x = "Week of Year", y = "Cases", colour = "Year") +
-  theme_bw(base_size = 11)
+  labs(x = "Week of Year", y = "Average Cases", colour = "District") +
+  theme_bw(base_size = 10)
 
-ggplotly(p_seasonal)
+ggplotly(p_seasonal_all, tooltip = "text")
 ```
 
 ## Row {height="50%"}
@@ -351,4 +426,3 @@ sl |>
     options = list(pageLength = 15, scrollX = TRUE)
   )
 ```
-
