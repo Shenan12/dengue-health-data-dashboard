@@ -1,27 +1,354 @@
 ---
-title: "Dengue Data Dashbaord"
-author: "Shenan Nathaniel"
-format: html
-editor: visual
+title: "Exploring Dengue in Sri Lanka"
+format: dashboard
+editor: source
+theme:
+  - flatly
+author: "AS2022434"
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+#| label: load-packages
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(dygraphs)
+library(xts)
+library(tsibble)
+library(feasts)
+library(fabletools)
+library(timetk)
+library(anomalize)
+library(slider)
+library(DT)
+library(leaflet)
+library(denguedatahub)
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
+#| label: load-data
+#| message: false
+#| warning: false
+
+data(srilanka_weekly_data)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+#| label: clean-data
+#| message: false
+#| warning: false
+
+sl <- srilanka_weekly_data |>
+  mutate(start.date = mdy(start.date)) |>
+  arrange(district, start.date)
+
+# All-island weekly totals
+sl_total <- sl |>
+  group_by(start.date) |>
+  summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop")
+
+# Colombo only
+colombo <- sl |>
+  filter(district == "Colombo")
+
+# Annual totals by district
+annual_district <- sl |>
+  mutate(year = year(start.date)) |>
+  group_by(district, year) |>
+  summarise(annual_cases = sum(cases, na.rm = TRUE), .groups = "drop")
+
+# Top 10 districts by total cases
+top10 <- annual_district |>
+  group_by(district) |>
+  summarise(total = sum(annual_cases), .groups = "drop") |>
+  slice_max(total, n = 10) |>
+  pull(district)
+
+# Colombo tsibble for STL
+colombo_ts <- colombo |>
+  mutate(year_week = yearweek(start.date)) |>
+  arrange(year_week) |>
+  as_tsibble(index = year_week)
+
+colombo_stl <- colombo_ts |>
+  model(STL(cases ~ season(period = 52))) |>
+  components()
+
+# xts for dygraph
+sl_xts <- xts(sl_total$cases, order.by = sl_total$start.date)
+colombo_xts <- xts(colombo$cases, order.by = colombo$start.date)
+
+# District coordinates for map
+district_coords <- tibble(
+  district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
+               "Nuwara Eliya", "Galle", "Matara", "Hambantota",
+               "Jaffna", "Kilinochchi", "Mannar", "Vavuniya", "Mullaitivu",
+               "Batticaloa", "Ampara", "Trincomalee",
+               "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa",
+               "Badulla", "Monaragala", "Ratnapura", "Kegalle"),
+  lat = c(6.927, 7.084, 6.585, 7.291, 7.470,
+          6.970, 6.054, 5.948, 6.124,
+          9.661, 9.395, 8.978, 8.751, 9.267,
+          7.717, 7.284, 8.587,
+          7.486, 8.036, 8.335, 7.939,
+          6.989, 6.873, 6.680, 7.253),
+  lon = c(79.861, 80.007, 79.960, 80.636, 80.624,
+          80.783, 80.221, 80.536, 81.119,
+          80.025, 80.399, 79.904, 80.497, 80.812,
+          81.700, 81.672, 81.234,
+          80.362, 79.840, 80.406, 81.000,
+          81.056, 81.349, 80.399, 80.349)
+)
+
+district_totals <- annual_district |>
+  group_by(district) |>
+  summarise(total_cases = sum(annual_cases), .groups = "drop")
+
+map_data <- left_join(district_coords, district_totals, by = "district")
+```
+
+# Overview
+
+## Row {height="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Total Cases (All Time)"
+
+list(
+  icon  = "virus",
+  color = "danger",
+  value = format(sum(sl_total$cases, na.rm = TRUE), big.mark = ",")
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Peak Weekly Cases"
+
+peak <- sl_total |> slice_max(cases, n = 1)
+list(
+  icon  = "arrow-up-circle",
+  color = "warning",
+  value = format(peak$cases, big.mark = ",")
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Peak Week"
+
+list(
+  icon  = "calendar-week",
+  color = "info",
+  value = format(peak$start.date, "%d %b %Y")
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Districts Covered"
+
+list(
+  icon  = "map",
+  color = "success",
+  value = n_distinct(sl$district)
+)
+```
+
+## Row {height="80%"}
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Weekly Dengue Cases — All Sri Lanka"
+
+dygraph(sl_xts) |>
+  dyRangeSelector() |>
+  dyOptions(
+    strokeWidth = 1.5,
+    fillGraph   = TRUE,
+    fillAlpha   = 0.12,
+    colors      = "#c0392b"
+  ) |>
+  dyHighlight(highlightSeriesOpts = list(strokeWidth = 2.5))
+```
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Annual Cases by District (Top 10)"
+
+p_top10 <- annual_district |>
+  filter(district %in% top10) |>
+  ggplot(aes(x = year, y = annual_cases,
+             colour = district, group = district)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 1.5) +
+  scale_colour_brewer(palette = "Paired") +
+  labs(x = "Year", y = "Annual Cases", colour = "District") +
+  theme_bw(base_size = 11)
+
+ggplotly(p_top10)
+```
+
+# District Map
+
+## Row
+
+```{r}
+#| title: "Total Dengue Cases by District"
+
+leaflet(map_data) |>
+  addTiles() |>
+  addCircleMarkers(
+    lng    = ~lon,
+    lat    = ~lat,
+    radius = ~sqrt(total_cases) / 8,
+    color  = "#c0392b",
+    fillColor = "#e74c3c",
+    fillOpacity = 0.7,
+    popup  = ~paste0(
+      "<b>District:</b> ", district, "<br>",
+      "<b>Total Cases:</b> ", format(total_cases, big.mark = ",")
+    ),
+    label  = ~district
+  ) |>
+  setView(lng = 80.7, lat = 7.8, zoom = 7)
+```
+
+# Colombo Deep Dive
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Colombo — Weekly Cases (Interactive)"
+
+dygraph(colombo_xts) |>
+  dyRangeSelector() |>
+  dyOptions(
+    strokeWidth = 1.5,
+    fillGraph   = TRUE,
+    fillAlpha   = 0.15,
+    colors      = "#2980b9"
+  ) |>
+  dyHighlight(highlightSeriesOpts = list(strokeWidth = 2.5))
+```
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Seasonal Plot — Cases by Year"
+
+p_seasonal <- colombo |>
+  mutate(
+    year = factor(year(start.date)),
+    week = isoweek(start.date)
+  ) |>
+  ggplot(aes(x = week, y = cases, colour = year, group = year)) +
+  geom_line(alpha = 0.65, linewidth = 0.5) +
+  scale_colour_viridis_d(option = "turbo") +
+  labs(x = "Week of Year", y = "Cases", colour = "Year") +
+  theme_bw(base_size = 11)
+
+ggplotly(p_seasonal)
+```
+
+## Row {height="50%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "STL Decomposition — Colombo"
+
+p_stl <- colombo_stl |>
+  as_tibble() |>
+  mutate(date = as.Date(year_week)) |>
+  select(date, cases, trend, season_52, remainder) |>
+  pivot_longer(-date, names_to = "component", values_to = "value") |>
+  mutate(component = factor(component,
+    levels = c("cases", "trend", "season_52", "remainder"),
+    labels = c("Observed", "Trend", "Seasonality", "Remainder"))) |>
+  ggplot(aes(x = date, y = value)) +
+  geom_line(colour = "#2c3e50", linewidth = 0.4) +
+  facet_wrap(~component, ncol = 1, scales = "free_y") +
+  labs(x = NULL, y = "Cases") +
+  theme_bw(base_size = 10) +
+  theme(strip.text = element_text(face = "bold"))
+
+ggplotly(p_stl)
+```
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Calendar Heatmap — Colombo"
+
+p_heat <- colombo |>
+  mutate(
+    Year = factor(year(start.date)),
+    Week = isoweek(start.date)
+  ) |>
+  ggplot(aes(x = Week, y = Year, fill = cases)) +
+  geom_tile(colour = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(option = "inferno", name = "Cases") +
+  labs(x = "Week of Year", y = "Year") +
+  theme_minimal(base_size = 10)
+
+ggplotly(p_heat)
+```
+
+# Trend & Anomalies
+
+## Row {height="50%"}
+
+```{r}
+#| title: "52-Week Rolling Mean — All Sri Lanka"
+
+p_roll <- sl_total |>
+  mutate(MA52 = slide_dbl(cases, mean, .before = 51, .complete = TRUE)) |>
+  ggplot(aes(x = start.date)) +
+  geom_line(aes(y = cases), colour = "grey70", linewidth = 0.4, alpha = 0.8) +
+  geom_line(aes(y = MA52), colour = "#c0392b", linewidth = 1) +
+  labs(x = "Date", y = "Cases",
+       caption = "Red = 52-week rolling mean | Grey = weekly observed") +
+  theme_bw(base_size = 11)
+
+ggplotly(p_roll)
+```
+
+## Row {height="50%"}
+
+```{r}
+#| title: "Anomaly Detection — Colombo"
+#| message: false
+#| warning: false
+
+colombo |>
+  time_decompose(cases, method = "stl", frequency = 52, trend = 104) |>
+  anomalize(remainder, method = "iqr") |>
+  time_recompose() |>
+  plot_anomalies(time_recomposed = TRUE, ncol = 1, alpha_dots = 0.5) +
+  labs(x = "Date", y = "Cases") +
+  theme_bw(base_size = 11)
+```
+
+# Data
+
+```{r}
+#| title: "Raw Data — Sri Lanka Weekly Dengue"
+
+sl |>
+  select(start.date, district, cases) |>
+  rename(Date = start.date, District = district, Cases = cases) |>
+  datatable(
+    filter  = "top",
+    options = list(pageLength = 15, scrollX = TRUE)
+  )
+```
+
