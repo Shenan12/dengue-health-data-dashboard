@@ -1,12 +1,14 @@
 ---
 title: "Exploring Dengue in Sri Lanka"
 author: "Shenan Nathaniel"
-format:
+format: 
   dashboard:
     theme: flatly
     css: custom.css
-editor: source
-favicon: "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦟</text></svg>"
+favicon: icon.png
+resources:
+  - icon.png
+  - Aedes_aegypti_feeding.jpg
 ---
 
 ```{r}
@@ -152,7 +154,9 @@ Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga 
 
 <br>
 
-<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Aedes_aegypti_CDC-Gathany.jpg/800px-Aedes_aegypti_CDC-Gathany.jpg" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+<div style="text-align: center; padding: 15px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e9ecef;">
+  <img src="Aedes_aegypti_feeding.jpg" style="max-width: 100%; max-height: 400px; height: auto; border-radius: 4px;">
+</div>
 
 # National Trends
 
