@@ -1,10 +1,12 @@
 ---
 title: "Exploring Dengue in Sri Lanka"
-format: dashboard
+author: "Shenan Nathaniel"
+format:
+  dashboard:
+    theme: flatly
+    css: custom.css
 editor: source
-theme:
-  - flatly
-author: "AS2022434"
+favicon: "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦟</text></svg>"
 ---
 
 ```{r}
@@ -15,15 +17,12 @@ author: "AS2022434"
 library(tidyverse)
 library(lubridate)
 library(plotly)
-library(dygraphs)
-library(xts)
 library(tsibble)
 library(feasts)
 library(fabletools)
-library(timetk)
-library(anomalize)
-library(slider)
 library(DT)
+library(dygraphs)
+library(xts)
 library(leaflet)
 library(denguedatahub)
 ```
@@ -34,6 +33,7 @@ library(denguedatahub)
 #| warning: false
 
 data(srilanka_weekly_data)
+data(sl_dengue_serotype)
 ```
 
 ```{r}
@@ -42,43 +42,30 @@ data(srilanka_weekly_data)
 #| warning: false
 
 sl <- srilanka_weekly_data |>
-  mutate(start.date = mdy(start.date)) |>
+  mutate(start.date = parse_date_time(start.date, orders = c("mdy", "ymd"))) |>
+  mutate(start.date = as.Date(start.date)) |>
+  mutate(epi_week = paste0(year(start.date), " - Week ", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
-# All-island weekly totals
 sl_total <- sl |>
   group_by(start.date) |>
-  summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop")
+  summarise(
+    cases    = sum(cases, na.rm = TRUE),
+    epi_week = first(epi_week),
+    .groups  = "drop"
+  )
 
-# Annual totals by district
 annual_district <- sl |>
   mutate(year = year(start.date)) |>
   group_by(district, year) |>
   summarise(annual_cases = sum(cases, na.rm = TRUE), .groups = "drop")
 
-# Top 10 districts by total cases
 top10 <- annual_district |>
   group_by(district) |>
   summarise(total = sum(annual_cases), .groups = "drop") |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# Colombo for STL and anomaly
-colombo <- sl |> filter(district == "Colombo")
-
-colombo_ts <- colombo |>
-  mutate(year_week = yearweek(start.date)) |>
-  arrange(year_week) |>
-  as_tsibble(index = year_week)
-
-colombo_stl <- colombo_ts |>
-  model(STL(cases ~ season(period = 52))) |>
-  components()
-
-# xts for dygraph
-sl_xts <- xts(sl_total$cases, order.by = sl_total$start.date)
-
-# District coordinates — names exactly match dataset
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
                "NuwaraEliya", "Galle", "Matara", "Hambanthota",
@@ -86,37 +73,30 @@ district_coords <- tibble(
                "Batticaloa", "Ampara", "Kalmune", "Trincomalee",
                "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa",
                "Badulla", "Monaragala", "Ratnapura", "Kegalle"),
-  lat = c(6.927, 7.084, 6.585, 7.291, 7.470,
-          6.970, 6.054, 5.948, 6.124,
-          9.661, 9.395, 8.978, 8.751, 9.267,
-          7.717, 7.284, 7.414, 8.587,
-          7.486, 8.036, 8.335, 7.939,
-          6.989, 6.873, 6.680, 7.253),
-  lon = c(79.861, 80.007, 79.960, 80.636, 80.624,
-          80.783, 80.221, 80.536, 81.119,
-          80.025, 80.399, 79.904, 80.497, 80.812,
-          81.700, 81.672, 81.836, 81.234,
-          80.362, 79.840, 80.406, 81.000,
-          81.056, 81.349, 80.399, 80.349)
+  lat = c(6.927, 7.084, 6.585, 7.291, 7.470, 6.970, 6.054, 5.948, 6.124,
+          9.661, 9.395, 8.978, 8.751, 9.267, 7.717, 7.284, 7.414, 8.587,
+          7.486, 8.036, 8.335, 7.939, 6.989, 6.873, 6.680, 7.253),
+  lon = c(79.861, 80.007, 79.960, 80.636, 80.624, 80.783, 80.221, 80.536, 81.119,
+          80.025, 80.399, 79.904, 80.497, 80.812, 81.700, 81.672, 81.836, 81.234,
+          80.362, 79.840, 80.406, 81.000, 81.056, 81.349, 80.399, 80.349)
 )
-
-district_totals <- annual_district |>
-  group_by(district) |>
-  summarise(total_cases = sum(annual_cases), .groups = "drop")
-
-map_data <- left_join(district_coords, district_totals, by = "district")
-
 yearly_map_data <- left_join(district_coords, annual_district, by = "district")
+
+districts <- sort(unique(sl$district))
+
+sl_ts <- sl_total |>
+  mutate(year_week = yearweek(start.date)) |>
+  as_tsibble(index = year_week) |>
+  fill_gaps(cases = 0)
 ```
 
 # Overview
 
-## Row {height="20%"}
+## Row {height="25%"}
 
 ```{r}
 #| content: valuebox
-#| title: "Total Cases (All Time)"
-
+#| title: "Total Reported Cases"
 list(
   icon  = "virus",
   color = "danger",
@@ -126,9 +106,8 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Peak Weekly Cases"
-
-peak <- sl_total |> slice_max(cases, n = 1)
+#| title: "Highest Weekly Case Count"
+peak <- sl_total |> slice_max(cases, n = 1, with_ties = FALSE)
 list(
   icon  = "arrow-up-circle",
   color = "warning",
@@ -138,83 +117,239 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Peak Week"
-
+#| title: "Week with Highest Cases"
 list(
   icon  = "calendar-week",
   color = "info",
-  value = format(peak$start.date, "%d %b %Y")
+  value = peak$epi_week
 )
 ```
 
-```{r}
-#| content: valuebox
-#| title: "Districts Covered"
+## Row {height="75%"}
 
-list(
-  icon  = "map",
-  color = "success",
-  value = n_distinct(sl$district)
-)
+### Column {width="100%"}
+
+#### About Dengue and This Dashboard
+
+Dengue is a mosquito-borne viral disease transmitted primarily by *Aedes aegypti* mosquitoes. Infection can cause symptoms ranging from mild fever and headache to more severe complications that may require hospitalization. As dengue remains a major public health concern in Sri Lanka, continuous surveillance is important for identifying outbreaks, monitoring transmission patterns, and supporting public health interventions.
+
+This dashboard provides an interactive exploration of weekly dengue surveillance data reported across Sri Lanka through the `denguedatahub` package. The visualizations allow users to examine national trends, compare districts, investigate seasonal patterns, explore geographic variation, and review historical dengue serotype information.
+
+#### How to Use the Dashboard
+
+- **Overview** provides a summary of the national dengue situation and key surveillance indicators.
+- **National Trends** displays long-term patterns in dengue incidence and compares annual case burdens across high-incidence districts.
+- **Interactive Trends** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector, with a zoomable range slider for fine-grained time navigation.
+- **Trend & Seasonality** presents an STL decomposition that separates observed dengue incidence into long-term trend, recurring seasonal patterns, and irregular variation.
+- **Map by Year** visualizes the geographic distribution of annual dengue cases across Sri Lanka.
+- **Annual Case Matrix** A heatmap of how the dengue cases spread across the years in Sri Lanka.
+- **Serotypes** shows the historical circulation of dengue virus serotypes reported in Sri Lanka.
+- **Data** provides access to the surveillance records and serotype data used throughout the dashboard.
+
+#### Data Source
+
+Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga Talagala and collaborators.
+
+<br>
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Aedes_aegypti_CDC-Gathany.jpg/800px-Aedes_aegypti_CDC-Gathany.jpg" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+
+# National Trends
+
+## Row
+
+### Column {width="50%"}
+
+```{r}
+#| title: "National Weekly Reported Cases"
+p_nat <- plot_ly(sl_total, x = ~start.date, y = ~cases, type = 'scatter', mode = 'lines',
+                 line = list(color = "#c0392b", width = 1.5),
+                 fill = 'tozeroy', fillcolor = 'rgba(192, 57, 43, 0.12)',
+                 text = ~paste("<b>National Total</b><br>", epi_week, "<br>Cases: ", format(cases, big.mark = ",")),
+                 hoverinfo = "text") |>
+  layout(
+    xaxis = list(title = "Timeline (Epi Weeks)", tickformat = "%Y - Week %V"),
+    yaxis = list(title = "Weekly Cases"),
+    hovermode = "x unified"
+  )
+
+p_nat
 ```
 
-## Row {height="80%"}
-
-### Column {width="60%"}
+### Column {width="50%"}
 
 ```{r}
-#| title: "Weekly Dengue Cases — All Sri Lanka"
-
-dygraph(sl_xts) |>
-  dyRangeSelector() |>
-  dyOptions(
-    strokeWidth = 1.5,
-    fillGraph   = TRUE,
-    fillAlpha   = 0.12,
-    colors      = "#c0392b"
-  ) |>
-  dyHighlight(highlightSeriesOpts = list(strokeWidth = 2.5))
-```
-
-### Column {width="40%"}
-
-```{r}
-#| title: "Annual Cases by District (Top 10)"
-
-p_top10 <- annual_district |>
-  filter(district %in% top10) |>
-  ggplot(aes(x = year, y = annual_cases,
-             colour = district, group = district)) +
-  geom_line(linewidth = 0.7) +
-  geom_point(size = 1.5) +
-  scale_colour_brewer(palette = "Paired") +
-  labs(x = "Year", y = "Annual Cases", colour = "District") +
-  theme_bw(base_size = 11)
-
-ggplotly(p_top10)
-```
-
-# District Map
-
-## Row {.tabset}
-
-### Map by Year
-
-```{r}
-#| title: "Dengue Cases by District — Select Year"
+#| title: "Annual Cases — Top 10 Highest-Burden Districts"
 #| message: false
 #| warning: false
 
-library(crosstalk)
-library(leaflet)
+annual_district |>
+  filter(district %in% top10) |>
+  mutate(district = factor(district, levels = top10)) |>
+  plot_ly(
+    x = ~year, 
+    y = ~annual_cases, 
+    color = ~district, 
+    colors = "Paired",
+    type = "scatter", 
+    mode = "lines+markers",
+    line = list(width = 2),
+    marker = list(size = 6),
+    text = ~paste0("<b>", district, "</b><br>Year: ", year, "<br>Cases: ", format(annual_cases, big.mark = ",")),
+    hoverinfo = "text"
+  ) |>
+  layout(
+    xaxis = list(title = "Reporting Year"),
+    yaxis = list(title = "Annual Cases", tickformat = ","),
+    legend = list(orientation = "h", x = 0, y = -0.2, font = list(size = 10)),
+    hovermode = "closest",
+    margin = list(b = 80)
+  ) |>
+  config(responsive = TRUE)
+```
 
-max_cases <- max(yearly_map_data$annual_cases, na.rm = TRUE)
-pal <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
+# Interactive Trends
 
+## Row
+
+```{r}
+#| title: "Weekly Dengue Cases by District"
+#| message: false
+#| warning: false
+
+traces <- lapply(seq_along(districts), function(i) {
+  d <- sl |> filter(district == districts[i])
+  list(
+    x         = d$start.date,
+    y         = d$cases,
+    type      = "scatter",
+    mode      = "lines",
+    name      = districts[i],
+    visible   = if (i == 1) TRUE else FALSE,
+    text      = paste0(
+      "<b>", d$district, "</b><br>",
+      d$epi_week, "<br>",
+      "Cases: ", d$cases
+    ),
+    hoverinfo = "text",
+    line      = list(color = "#2980b9", width = 1.2)
+  )
+})
+
+buttons <- lapply(seq_along(districts), function(i) {
+  vis    <- rep(FALSE, length(districts))
+  vis[i] <- TRUE
+  list(
+    method = "update",
+    args   = list(list(visible = as.list(vis))),
+    label  = districts[i]
+  )
+})
+
+p_interactive <- plot_ly()
+for (tr in traces) {
+  p_interactive <- add_trace(
+    p_interactive, x = tr$x, y = tr$y, type = tr$type, mode = tr$mode,
+    name = tr$name, visible = tr$visible, text = tr$text, hoverinfo = tr$hoverinfo, line = tr$line
+  )
+}
+
+p_interactive |>
+  layout(
+    updatemenus = list(list(
+      type    = "dropdown",
+      active  = 0,
+      buttons = buttons,
+      x       = 0,
+      xanchor = "left",
+      y       = 1.15,
+      yanchor = "top"
+    )),
+    xaxis = list(
+      title = "Timeline (Epi Weeks)",
+      tickformat = "%Y - Week %V",
+      rangeslider = list(visible = TRUE),
+      rangeselector = list(
+        buttons = list(
+          list(count = 1, label = "1y", step = "year", stepmode = "backward"),
+          list(count = 3, label = "3y", step = "year", stepmode = "backward"),
+          list(count = 5, label = "5y", step = "year", stepmode = "backward"),
+          list(step = "all", label = "All")
+        )
+      )
+    ),
+    yaxis      = list(title = "Weekly Cases", tickformat = ","),
+    showlegend = FALSE,
+    margin     = list(t = 110)
+  )
+```
+
+# Trend & Seasonality
+
+## Row {height="10%"}
+
+STL (Seasonal-Trend decomposition using Loess) separates the observed dengue case series into three components: a long-term trend, recurring seasonal patterns, and an irregular remainder. This helps identify underlying transmission patterns that may not be immediately visible in the raw data.
+
+## Row {height="90%"}
+
+```{r}
+#| title: "STL Decomposition — National Weekly Cases"
+#| message: false
+#| warning: false
+
+dcmp <- sl_ts |>
+  model(STL(cases ~ season(period = 52), robust = TRUE)) |>
+  components()
+
+p_dcmp_data <- dcmp |>
+  as_tibble() |>
+  mutate(
+    plot_date = as.Date(year_week),
+    epi_week  = paste0(year(plot_date), " - Week ", sprintf("%02d", isoweek(plot_date)))
+  ) |>
+  pivot_longer(
+    cols      = c(cases, trend, season_52, remainder), 
+    names_to  = "component",
+    values_to = "value"
+  ) |>
+  mutate(component = factor(
+    component,
+    levels = c("cases", "trend", "season_52", "remainder"), 
+    labels = c("Observed", "Trend", "Seasonal", "Remainder")
+  ))
+
+p_dcmp <- ggplot(p_dcmp_data, aes(
+    x = plot_date, 
+    y = value, 
+    group = 1,  
+    text = paste0(
+      "<b>", component, "</b><br>",
+      epi_week, "<br>",
+      "Value: ", round(value, 1)
+  ))) +
+  geom_line(colour = "#2980b9", linewidth = 0.5) +
+  facet_wrap(~component, ncol = 1, scales = "free_y") +
+  labs(x = "Timeline (Epi Weeks)", y = "Weekly Cases") +
+  theme_bw(base_size = 10) +
+  theme(strip.text = element_text(face = "bold"))
+
+ggplotly(p_dcmp, tooltip = "text") |>
+  layout(
+    margin = list(t = 20),
+    xaxis  = list(tickformat = "%Y - Week %V")
+  )
+```
+
+# Map by Year
+
+```{r}
+#| title: "Annual Dengue Cases by District"
+#| message: false
+#| warning: false
+
+max_cases  <- max(yearly_map_data$annual_cases, na.rm = TRUE)
+pal        <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
 years_list <- sort(unique(yearly_map_data$year))
-
-# build one leaflet map per year, show first by default
-# use leaflet with overlayGroups per year
 
 m <- leaflet() |>
   addTiles() |>
@@ -232,197 +367,151 @@ for (yr in years_list) {
       fillColor   = ~pal(annual_cases),
       fillOpacity = 0.85,
       opacity     = 1,
-      popup       = ~paste0("<b>District:</b> ", district,
-                            "<br><b>Year:</b> ", year,
-                            "<br><b>Cases:</b> ", format(annual_cases, big.mark = ",")),
-      label       = ~district,
-      group       = as.character(yr)
+      popup       = ~paste0(
+        "<b>District:</b> ", district, "<br>",
+        "<b>Year:</b> ", year, "<br>",
+        "<b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")
+      ),
+      label = ~district,
+      group = as.character(yr)
     )
 }
 
 m |>
   addLayersControl(
-    baseGroups   = as.character(years_list),
-    options      = layersControlOptions(collapsed = FALSE)
+    baseGroups = as.character(years_list),
+    options    = layersControlOptions(collapsed = FALSE)
   ) |>
   addLegend(
-    pal    = pal,
-    values = c(0, max_cases),
-    title  = "Annual Cases"
+    pal      = pal,
+    values   = c(0, max_cases),
+    title    = "Annual Cases",
+    position = "bottomleft"
   )
 ```
 
-### Cases by District
+# Annual Case Matrix
 
 ```{r}
-#| title: "Annual Cases by District — Animated by Year"
+#| title: "District × Year Case Intensity"
+p_matrix <- ggplot(
+  annual_district,
+  aes(
+    x    = year,
+    y    = reorder(district, annual_cases, sum),
+    fill = annual_cases,
+    text = paste0(
+      "<b>", district, "</b><br>",
+      "Year: ", year, "<br>",
+      "Cases: ", format(annual_cases, big.mark = ",")
+    )
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  scale_fill_distiller(
+    palette   = "YlOrRd",
+    direction = 1,
+    name      = "Cases",
+    labels    = scales::comma
+  ) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  labs(x = "Reporting Year", y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.y     = element_text(size = 9),
+    axis.text.x     = element_text(size = 9),
+    legend.position = "right"
+  )
 
-yearly_map_data |>
-  arrange(annual_cases) |>
-  plot_ly(
-    x           = ~annual_cases,
-    y           = ~district,
-    frame       = ~year,
-    type        = "bar",
-    orientation = "h",
-    marker      = list(color = ~annual_cases, colorscale = "Reds"),
-    text        = ~paste0("District: ", district,
-                          "<br>Year: ", year,
-                          "<br>Cases: ", format(annual_cases, big.mark = ",")),
-    hoverinfo   = "text"
-  ) |>
-  layout(
-    xaxis      = list(title = "Annual Cases", tickfont = list(size = 13)),
-    yaxis      = list(
-      title         = "",
-      tickfont      = list(size = 13),
-      categoryorder = "total ascending"
-    ),
-    margin     = list(l = 120, r = 20, t = 30, b = 50),
-    showlegend = FALSE,
-    height     = 600
-  ) |>
-  animation_opts(frame = 800, transition = 400) |>
-  animation_slider(currentvalue = list(prefix = "Year: "))
+ggplotly(p_matrix, tooltip = "text") |>
+  layout(margin = list(l = 110, r = 20, t = 20, b = 50))
 ```
 
-# District Deep Dive
+# Serotypes
 
-## Row {height="50%"}
-
-### Column {width="50%"}
+## Row {height="100%"}
 
 ```{r}
-#| title: "Weekly Cases — All Districts"
-
-p_district_ts <- sl |>
-  ggplot(aes(x = start.date, y = cases,
-             colour = district,
-             text = paste0("District: ", district,
-                           "<br>Date: ", start.date,
-                           "<br>Cases: ", cases))) +
-  geom_line(linewidth = 0.4, alpha = 0.7) +
-  scale_colour_viridis_d(option = "turbo") +
-  labs(x = "Date", y = "Cases", colour = "District") +
-  theme_bw(base_size = 10)
-
-ggplotly(p_district_ts, tooltip = "text")
-```
-
-### Column {width="50%"}
-
-```{r}
-#| title: "Seasonal Pattern — All Districts"
-
-p_seasonal_all <- sl |>
-  mutate(
-    week = isoweek(start.date),
-    year = factor(year(start.date))
-  ) |>
-  group_by(district, week) |>
-  summarise(cases = mean(cases), .groups = "drop") |>
-  ggplot(aes(x = week, y = cases,
-             colour = district,
-             text = paste0("District: ", district,
-                           "<br>Week: ", week,
-                           "<br>Avg Cases: ", round(cases, 1)))) +
-  geom_line(linewidth = 0.5, alpha = 0.7) +
-  scale_colour_viridis_d(option = "turbo") +
-  labs(x = "Week of Year", y = "Average Cases", colour = "District") +
-  theme_bw(base_size = 10)
-
-ggplotly(p_seasonal_all, tooltip = "text")
-```
-
-## Row {height="50%"}
-
-### Column {width="50%"}
-
-```{r}
-#| title: "STL Decomposition — Colombo"
-
-p_stl <- colombo_stl |>
-  as_tibble() |>
-  mutate(date = as.Date(year_week)) |>
-  select(date, cases, trend, season_52, remainder) |>
-  pivot_longer(-date, names_to = "component", values_to = "value") |>
-  mutate(component = factor(component,
-    levels = c("cases", "trend", "season_52", "remainder"),
-    labels = c("Observed", "Trend", "Seasonality", "Remainder"))) |>
-  ggplot(aes(x = date, y = value)) +
-  geom_line(colour = "#2c3e50", linewidth = 0.4) +
-  facet_wrap(~component, ncol = 1, scales = "free_y") +
-  labs(x = NULL, y = "Cases") +
-  theme_bw(base_size = 10) +
-  theme(strip.text = element_text(face = "bold"))
-
-ggplotly(p_stl)
-```
-
-### Column {width="50%"}
-
-```{r}
-#| title: "Calendar Heatmap — Colombo"
-
-p_heat <- colombo |>
-  mutate(
-    Year = factor(year(start.date)),
-    Week = isoweek(start.date)
-  ) |>
-  ggplot(aes(x = Week, y = Year, fill = cases)) +
-  geom_tile(colour = "white", linewidth = 0.2) +
-  scale_fill_viridis_c(option = "inferno", name = "Cases") +
-  labs(x = "Week of Year", y = "Year") +
-  theme_minimal(base_size = 10)
-
-ggplotly(p_heat)
-```
-
-# Trend & Anomalies
-
-## Row {height="50%"}
-
-```{r}
-#| title: "52-Week Rolling Mean — All Sri Lanka"
-
-p_roll <- sl_total |>
-  mutate(MA52 = slide_dbl(cases, mean, .before = 51, .complete = TRUE)) |>
-  ggplot(aes(x = start.date)) +
-  geom_line(aes(y = cases), colour = "grey70", linewidth = 0.4, alpha = 0.8) +
-  geom_line(aes(y = MA52), colour = "#c0392b", linewidth = 1) +
-  labs(x = "Date", y = "Cases",
-       caption = "Red = 52-week rolling mean | Grey = weekly observed") +
-  theme_bw(base_size = 11)
-
-ggplotly(p_roll)
-```
-
-## Row {height="50%"}
-
-```{r}
-#| title: "Anomaly Detection — Colombo"
+#| title: "Circulating Dengue Serotypes by Year (Presence Matrix)"
 #| message: false
 #| warning: false
 
-colombo |>
-  time_decompose(cases, method = "stl", frequency = 52, trend = 104) |>
-  anomalize(remainder, method = "iqr") |>
-  time_recompose() |>
-  plot_anomalies(time_recomposed = TRUE, ncol = 1, alpha_dots = 0.5) +
-  labs(x = "Date", y = "Cases") +
-  theme_bw(base_size = 11)
+p_sero <- sl_dengue_serotype |>
+  separate_rows(dengue.serotype, sep = ",\\s*") |>
+  mutate(presence = "Detected") |>
+  ggplot(aes(
+    x    = reporting.year,
+    y    = dengue.serotype,
+    fill = presence,
+    text = paste0("<b>", dengue.serotype, "</b><br>Detected in Year: ", reporting.year)
+  )) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  scale_fill_manual(values = c("Detected" = "#e74c3c")) +
+  scale_x_continuous(breaks = seq(min(sl_dengue_serotype$reporting.year), 
+                                  max(sl_dengue_serotype$reporting.year), by = 2)) +
+  labs(x = "Reporting Year", y = "Identified Serotype") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+ggplotly(p_sero, tooltip = "text") |>
+  layout(margin = list(l = 80))
 ```
 
 # Data
 
+## Row {.tabset}
+
+### Weekly Surveillance Data
+
 ```{r}
-#| title: "Raw Data — Sri Lanka Weekly Dengue"
+#| title: "Sri Lanka Weekly Dengue Surveillance Records"
+#| message: false
+#| warning: false
 
 sl |>
-  select(start.date, district, cases) |>
-  rename(Date = start.date, District = district, Cases = cases) |>
+  select(epi_week, district, cases) |>
+  rename(
+    `Epidemiological Week` = epi_week,
+    District               = district,
+    `Reported Cases`       = cases
+  ) |>
   datatable(
-    filter  = "top",
-    options = list(pageLength = 15, scrollX = TRUE)
+    filter   = "top",
+    rownames = FALSE,
+    options  = list(
+      pageLength = 15,
+      scrollX    = TRUE,
+      dom        = "Bfrtip",
+      buttons    = c("copy", "csv", "excel")
+    ),
+    extensions = "Buttons"
+  )
+```
+
+### Serotype Records
+
+```{r}
+#| title: "Historical Dengue Serotype Identifications"
+#| message: false
+#| warning: false
+
+sl_dengue_serotype |>
+  rename(
+    `Reporting Year` = reporting.year,
+    `Identified Serotypes` = dengue.serotype
+  ) |>
+  datatable(
+    filter   = "top",
+    rownames = FALSE,
+    options  = list(
+      pageLength = 15,
+      scrollX    = TRUE,
+      dom        = "Bfrtip",
+      buttons    = c("copy", "csv", "excel")
+    ),
+    extensions = "Buttons"
   )
 ```
