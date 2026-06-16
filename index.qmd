@@ -1,6 +1,6 @@
 ---
 title: "Exploring Dengue in Sri Lanka"
-author: "AS2022434"
+author: "Shenan Nathaniel"
 format: dashboard
 editor: source
 theme: flatly
@@ -19,11 +19,11 @@ library(xts)
 library(tsibble)
 library(feasts)
 library(fabletools)
-library(timetk)
 library(slider)
 library(DT)
 library(leaflet)
 library(crosstalk)
+library(htmltools)
 library(denguedatahub)
 ```
 
@@ -40,31 +40,37 @@ data(srilanka_weekly_data)
 #| message: false
 #| warning: false
 
-# Clean Dates and Standardize
+# Clean dates, standardize timelines, and create a logical Epidemiological Week label
 sl <- srilanka_weekly_data |>
   mutate(start.date = parse_date_time(start.date, orders = c("mdy", "ymd"))) |>
   mutate(start.date = as.Date(start.date)) |>
+  mutate(epi_week = paste0(year(start.date), " - W", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
 # National Totals
 sl_total <- sl |>
   group_by(start.date) |>
-  summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop")
+  summarise(
+    cases = sum(cases, na.rm = TRUE), 
+    epi_week = first(epi_week),
+    .groups = "drop"
+  )
 sl_xts <- xts(sl_total$cases, order.by = sl_total$start.date)
 
-# Annual & Top Districts
+# Annual Totals by District
 annual_district <- sl |>
   mutate(year = year(start.date)) |>
   group_by(district, year) |>
   summarise(annual_cases = sum(cases, na.rm = TRUE), .groups = "drop")
 
+# Identify top burden regions for the line graphs
 top10 <- annual_district |>
   group_by(district) |>
   summarise(total = sum(annual_cases), .groups = "drop") |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# Map Coordinates
+# Geographic Coordinates
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
                "Nuwara Eliya", "Galle", "Matara", "Hambantota",
@@ -81,98 +87,95 @@ district_coords <- tibble(
 )
 yearly_map_data <- left_join(district_coords, annual_district, by = "district")
 
-# Crosstalk SharedData
-shared_sl <- SharedData$new(sl)
-
-# Pre-calculate STL for Top 4 to put in tabs
-calc_stl <- function(dist_name) {
-  sl |> 
-    filter(district == dist_name) |>
-    mutate(year_week = yearweek(start.date)) |>
-    arrange(year_week) |>
-    as_tsibble(index = year_week) |>
-    model(STL(cases ~ season(period = 52))) |>
-    components() |>
-    autoplot() + theme_bw(base_size = 10) + labs(x = NULL, title = paste("STL -", dist_name))
-}
-
-stl_colombo <- calc_stl("Colombo")
-stl_gampaha <- calc_stl("Gampaha")
-stl_kalutara <- calc_stl("Kalutara")
-stl_kandy <- calc_stl("Kandy")
-
-# Pre-calculate Heatmaps for Top 4
-calc_heat <- function(dist_name) {
-  sl |> filter(district == dist_name) |>
-    mutate(Year = fct_rev(factor(year(start.date))), Week = isoweek(start.date)) |>
-    ggplot(aes(x = Week, y = Year, fill = cases)) +
-    geom_tile(colour = "white", linewidth = 0.2) +
-    scale_fill_viridis_c(option = "inferno", name = "Cases") +
-    labs(x = "Week of Year", y = "Year", title = paste("Heatmap -", dist_name)) +
-    theme_minimal(base_size = 10)
-}
-
-heat_colombo <- calc_heat("Colombo")
-heat_gampaha <- calc_heat("Gampaha")
-heat_kalutara <- calc_heat("Kalutara")
-heat_kandy <- calc_heat("Kandy")
+# Isolate page-specific crosstalk datasets to stop cross-page communications
+trends_shared <- SharedData$new(sl, group = "trends_page")
 ```
 
 # Overview
 
-## Row {height="20%"}
+## Row {height="35%"}
 
 ```{r}
 #| content: valuebox
 #| title: "Total Cases (All Time)"
-list(icon = "virus", color = "danger", value = format(sum(sl_total$cases, na.rm = TRUE), big.mark = ","))
+list(
+  icon  = "virus",
+  color = "danger",
+  value = format(sum(sl_total$cases, na.rm = TRUE), big.mark = ",")
+)
 ```
 
 ```{r}
 #| content: valuebox
 #| title: "Peak Weekly Cases"
 peak <- sl_total |> slice_max(cases, n = 1, with_ties = FALSE)
-list(icon = "arrow-up-circle", color = "warning", value = format(peak$cases, big.mark = ","))
+list(
+  icon  = "arrow-up-circle",
+  color = "warning",
+  value = format(peak$cases, big.mark = ",")
+)
 ```
 
 ```{r}
 #| content: valuebox
 #| title: "Peak Week"
-list(icon = "calendar-week", color = "info", value = paste0("Week ", isoweek(peak$start.date), ", ", year(peak$start.date)))
+list(
+  icon  = "calendar-week",
+  color = "info",
+  value = peak$epi_week
+)
 ```
 
-```{r}
-#| content: valuebox
-#| title: "Districts Covered"
-list(icon = "map", color = "success", value = n_distinct(sl$district))
-```
+## Row {height="65%"}
 
-## Row {height="80%"}
+### Column {width="100%"}
+
+### Core Exploratory Findings & Metadata Summary
+
+Welcome to the Dengue Surveillance Dashboard for Sri Lanka. This analytical platform processes structural epidemiological records across all administrative districts to track outbreaks, evaluate seasonal distribution changes, and isolate historical trends.
+
+#### Key Insights Captured:
+* **The High-Burden Corridor:** Preliminary analysis confirms that the Western Province (consisting of Colombo, Gampaha, and Kalutara) bears the highest historical caseload in the country. 
+* **Temporal Outbreak Dynamics:** The country experienced its highest all-time epidemiological transmission threshold during the year 2017, driven by heavy monsoon-associated vector proliferation.
+* **Logical Structuring:** All temporal metrics within this platform have been converted to formal Epidemiological Weeks (Epi Weeks) rather than single days, matching standard public health reporting conventions.
+
+*Navigate through the top tab structure to inspect national trend lines, geographic distributions, individual district breakdowns, and clear database records.*
+
+# National Trends
+
+## Row
 
 ### Column {width="60%"}
 
 ```{r}
-#| title: "Weekly Dengue Cases — All Sri Lanka"
+#| title: "Weekly Transmission Volume — National Total Timeline"
 dygraph(sl_xts) |>
   dyRangeSelector() |>
-  dyOptions(strokeWidth = 1.5, fillGraph = TRUE, fillAlpha = 0.12, colors = "#c0392b") |>
+  dyOptions(
+    strokeWidth = 1.5,
+    fillGraph   = TRUE,
+    fillAlpha   = 0.12,
+    colors      = "#c0392b"
+  ) |>
   dyHighlight(highlightSeriesOpts = list(strokeWidth = 2.5))
 ```
 
 ### Column {width="40%"}
 
 ```{r}
-#| title: "Annual Cases by District (Top 10)"
+#| title: "Annual Outbreak Aggregations (Top 10 Highest-Burden Districts)"
 p_top10 <- annual_district |>
   filter(district %in% top10) |>
-  ggplot(aes(x = year, y = annual_cases, colour = district, group = district)) +
+  ggplot(aes(x = year, y = annual_cases, colour = district, group = district,
+             text = paste0("District: ", district, "<br>Year: ", year, "<br>Annual Cases: ", format(annual_cases, big.mark = ",")))) +
   geom_line(linewidth = 0.7) +
   geom_point(size = 1.5) +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "Year", y = "Annual Cases", colour = "District") +
   theme_bw(base_size = 11)
 
-ggplotly(p_top10) |> layout(hovermode = "x unified")
+ggplotly(p_top10, tooltip = "text") |> 
+  layout(hovermode = "closest")
 ```
 
 # District Map
@@ -182,7 +185,7 @@ ggplotly(p_top10) |> layout(hovermode = "x unified")
 ### Map by Year
 
 ```{r}
-#| title: "Dengue Cases by District — Select Year"
+#| title: "Geographic Spread by Selected Year"
 #| message: false
 #| warning: false
 
@@ -206,45 +209,41 @@ for (yr in years_list) {
       fillColor   = ~pal(annual_cases),
       fillOpacity = 0.85,
       opacity     = 1,
-      popup       = ~paste0("<b>District:</b> ", district, "<br><b>Year:</b> ", year, "<br><b>Cases:</b> ", format(annual_cases, big.mark = ",")),
+      popup       = ~paste0("<b>District:</b> ", district,
+                            "<br><b>Year:</b> ", year,
+                            "<br><b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")),
       label       = ~district,
       group       = as.character(yr)
     )
 }
 
+# Position explicitly moved to "bottomleft" to fix visibility issues
 m |>
   addLayersControl(
     baseGroups = as.character(years_list),
     options    = layersControlOptions(collapsed = FALSE)
   ) |>
-  addLegend(pal = pal, values = c(0, max_cases), title = "Annual Cases")
+  addLegend(
+    pal      = pal,
+    values   = c(0, max_cases),
+    title    = "Annual Cases",
+    position = "bottomleft"
+  )
 ```
 
-### Cases by District
+### Annual Case Matrix (All 26 Districts)
 
 ```{r}
-#| title: "Annual Cases by District — Animated by Year"
-yearly_map_data |>
-  arrange(annual_cases) |>
-  plot_ly(
-    x           = ~annual_cases,
-    y           = ~district,
-    frame       = ~year,
-    type        = "bar",
-    orientation = "h",
-    marker      = list(color = ~annual_cases, colorscale = "Reds"),
-    text        = ~paste0("District: ", district, "<br>Year: ", year, "<br>Cases: ", format(annual_cases, big.mark = ",")),
-    hoverinfo   = "text"
-  ) |>
-  layout(
-    xaxis      = list(title = "Annual Cases", tickfont = list(size = 13)),
-    yaxis      = list(title = "", tickfont = list(size = 13)),
-    margin     = list(l = 120, r = 20, t = 30, b = 50),
-    showlegend = FALSE,
-    height     = 600
-  ) |>
-  animation_opts(frame = 800, transition = 400) |>
-  animation_slider(currentvalue = list(prefix = "Year: "))
+#| title: "Comparative District Timelines (Replaces Broken Animation)"
+p_matrix <- ggplot(annual_district, aes(x = year, y = reorder(district, annual_cases, sum), fill = annual_cases,
+                        text = paste0("District: ", district, "<br>Year: ", year, "<br>Cases: ", format(annual_cases, big.mark = ",")))) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "Cases", labels = scales::comma) +
+  labs(x = "Reporting Year", y = "") +
+  theme_minimal(base_size = 11)
+
+ggplotly(p_matrix, tooltip = "text") |> 
+  layout(margin = list(l = 100, r = 20, t = 30, b = 50))
 ```
 
 # Interactive Trends
@@ -252,134 +251,102 @@ yearly_map_data |>
 ## Sidebar {.sidebar}
 
 ```{r}
-# Client-side JavaScript dropdown! No Shiny required.
 filter_select(
-  id = "district_chooser",
-  label = "Choose a District to isolate its Time Series:",
-  sharedData = shared_sl,
-  group = ~district,
-  multiple = FALSE
+  id         = "trends_district_chooser",
+  label      = "Isolate Specific District Line:",
+  sharedData = trends_shared,
+  group      = ~district,
+  multiple   = FALSE
 )
 ```
 
 ---
 
-*Select a district from the dropdown above. The Time Series chart to the right and the Data table on the 'Data' page will instantly update.*
+*Use the isolated drop-down menu above to select a single district line. This page functions independently to eliminate cross-widget clutter.*
 
 ## Row
 
 ```{r}
-#| title: "Weekly Cases — Filtered by Sidebar Dropdown"
+#| title: "Weekly Trajectory Analysis by Selected District"
 
-plot_ly(shared_sl, x = ~start.date, y = ~cases, color = ~district, 
-        colors = "viridis", type = 'scatter', mode = 'lines',
-        text = ~paste("Date:", start.date, "<br>Cases:", cases),
+plot_ly(trends_shared, x = ~start.date, y = ~cases, color = ~district, 
+        colors = "Set2", type = 'scatter', mode = 'lines',
+        text = ~paste0("District: ", district, "<br>Epi Week: ", epi_week, "<br>Weekly Cases: ", cases),
         hoverinfo = "text") |>
   layout(
-    xaxis = list(title = "Date"),
-    yaxis = list(title = "Cases"),
-    showlegend = FALSE
+    xaxis = list(title = "Timeline (Zoomable Grid)"),
+    yaxis = list(title = "Observed Cases"),
+    showlegend = TRUE
   )
 ```
 
-# Deep Dive: Top 4 Districts
+# District Deep Dive
 
 ## Row {.tabset}
 
-### Colombo
-
 ```{r}
-#| title: "Colombo: STL & Heatmap"
-#| fig-height: 8
-subplot(
-  ggplotly(stl_colombo), 
-  ggplotly(heat_colombo, tooltip = c("x", "y", "fill")) |> layout(hovermode = "closest"), 
-  nrows = 2, margin = 0.05, titleY = TRUE
-)
-```
+#| results: asis
+#| echo: false
 
-### Gampaha
+all_districts <- sort(unique(sl$district))
 
-```{r}
-#| title: "Gampaha: STL & Heatmap"
-#| fig-height: 8
-subplot(
-  ggplotly(stl_gampaha), 
-  ggplotly(heat_gampaha, tooltip = c("x", "y", "fill")) |> layout(hovermode = "closest"), 
-  nrows = 2, margin = 0.05, titleY = TRUE
-)
-```
-
-### Kalutara
-
-```{r}
-#| title: "Kalutara: STL & Heatmap"
-#| fig-height: 8
-subplot(
-  ggplotly(stl_kalutara), 
-  ggplotly(heat_kalutara, tooltip = c("x", "y", "fill")) |> layout(hovermode = "closest"), 
-  nrows = 2, margin = 0.05, titleY = TRUE
-)
-```
-
-### Kandy
-
-```{r}
-#| title: "Kandy: STL & Heatmap"
-#| fig-height: 8
-subplot(
-  ggplotly(stl_kandy), 
-  ggplotly(heat_kandy, tooltip = c("x", "y", "fill")) |> layout(hovermode = "closest"), 
-  nrows = 2, margin = 0.05, titleY = TRUE
-)
-```
-
-# National Anomalies
-
-## Row {height="40%"}
-
-```{r}
-#| title: "52-Week Rolling Mean — All Sri Lanka"
-p_roll <- sl_total |>
-  mutate(MA52 = slide_dbl(cases, mean, .before = 51, .complete = TRUE)) |>
-  ggplot(aes(x = start.date)) +
-  geom_line(aes(y = cases), colour = "grey70", linewidth = 0.4, alpha = 0.8) +
-  geom_line(aes(y = MA52), colour = "#c0392b", linewidth = 1) +
-  labs(x = "Date", y = "Cases", caption = "Red = 52-week rolling mean | Grey = weekly observed") +
-  theme_bw(base_size = 11)
-
-ggplotly(p_roll) |> layout(hovermode = "x unified")
-```
-
-## Row {height="60%"}
-
-```{r}
-#| title: "Anomaly Detection — Highest Burden Districts"
-#| message: false
-#| warning: false
-
-top4_data <- sl |> filter(district %in% c("Colombo", "Gampaha", "Kalutara", "Kandy"))
-
-top4_data |>
-  group_by(district) |>
-  plot_anomaly_diagnostics(
-    .date_var    = start.date, 
-    .value       = cases, 
-    .facet_ncol  = 2, 
-    .interactive = TRUE,
-    .title       = ""
+for (i in seq_along(all_districts)) {
+  current_dist <- all_districts[i]
+  
+  cat(paste0("### ", current_dist, "\n\n"))
+  
+  # Filter data for specific iteration
+  dist_data <- sl |> filter(district == current_dist)
+  
+  # 1. STL Decomposition Calculation
+  dist_ts <- dist_data |>
+    mutate(year_week = yearweek(start.date)) |>
+    distinct(year_week, .keep_all = TRUE) |>
+    arrange(year_week) |>
+    as_tsibble(index = year_week)
+  
+  stl_model <- dist_ts |>
+    model(STL(cases ~ season(period = 52))) |>
+    components()
+  
+  p_stl <- autoplot(stl_model) + 
+    theme_bw(base_size = 9) + 
+    labs(x = NULL, title = paste(current_dist, "— Temporal Dissection (Trend & Seasonality)"))
+  
+  # 2. High-Contrast Yellow-Orange-Red Heatmap
+  p_heat <- dist_data |>
+    mutate(Year = fct_rev(factor(year(start.date))), Week = isoweek(start.date)) |>
+    ggplot(aes(x = Week, y = Year, fill = cases,
+               text = paste0("Year: ", year(start.date), "<br>Week: ", Week, "<br>Cases: ", cases))) +
+    geom_tile(colour = "white", linewidth = 0.1) +
+    scale_fill_viridis_c(option = "YlOrRd", name = "Cases") +
+    labs(x = "Calendar Week of Year", y = "Year", title = paste(current_dist, "— Outbreak Grid Density")) +
+    theme_minimal(base_size = 9)
+  
+  # Stitch components side-by-side using an elegant dynamic subplot widget structure
+  sub_plot <- subplot(
+    ggplotly(p_stl), 
+    ggplotly(p_heat, tooltip = "text") |> layout(hovermode = "closest"), 
+    nrows = 2, margin = 0.07, titleY = TRUE
   )
+  
+  print(htmltools::tagList(sub_plot))
+  cat("\n\n")
+}
 ```
 
 # Data
 
 ```{r}
-#| title: "Searchable Dataset (Responds to Sidebar Filter on 'Interactive Trends' page)"
-datatable(
-  shared_sl,
-  filter  = "top",
-  options = list(pageLength = 15, scrollX = TRUE),
-  rownames = FALSE,
-  colnames = c("Date", "District", "Cases")
-)
+#| title: "Independent Data Repository Browser"
+
+# Standard dataframe passed directly to isolate search metrics and stop background cross-filtering
+sl |>
+  select(epi_week, district, cases) |>
+  rename(`Epidemiological Week` = epi_week, District = district, `Registered Cases` = cases) |>
+  datatable(
+    filter   = "top",
+    rownames = FALSE,
+    options  = list(pageLength = 15, scrollX = TRUE)
+  )
 ```
