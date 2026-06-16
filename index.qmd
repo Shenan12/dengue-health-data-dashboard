@@ -22,8 +22,6 @@ library(fabletools)
 library(slider)
 library(DT)
 library(leaflet)
-library(crosstalk)
-library(htmltools)
 library(denguedatahub)
 ```
 
@@ -40,42 +38,37 @@ data(srilanka_weekly_data)
 #| message: false
 #| warning: false
 
-# Clean dates, standardize timelines, and create a logical Epidemiological Week label
 sl <- srilanka_weekly_data |>
   mutate(start.date = parse_date_time(start.date, orders = c("mdy", "ymd"))) |>
   mutate(start.date = as.Date(start.date)) |>
   mutate(epi_week = paste0(year(start.date), " - W", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
-# National Totals
 sl_total <- sl |>
   group_by(start.date) |>
   summarise(
-    cases = sum(cases, na.rm = TRUE), 
+    cases    = sum(cases, na.rm = TRUE),
     epi_week = first(epi_week),
-    .groups = "drop"
+    .groups  = "drop"
   )
 sl_xts <- xts(sl_total$cases, order.by = sl_total$start.date)
 
-# Annual Totals by District
 annual_district <- sl |>
   mutate(year = year(start.date)) |>
   group_by(district, year) |>
   summarise(annual_cases = sum(cases, na.rm = TRUE), .groups = "drop")
 
-# Identify top burden regions for the line graphs
 top10 <- annual_district |>
   group_by(district) |>
   summarise(total = sum(annual_cases), .groups = "drop") |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# Geographic Coordinates
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
-               "Nuwara Eliya", "Galle", "Matara", "Hambantota",
+               "NuwaraEliya", "Galle", "Matara", "Hambanthota",
                "Jaffna", "Kilinochchi", "Mannar", "Vavuniya", "Mullaitivu",
-               "Batticaloa", "Ampara", "Kalmunai", "Trincomalee",
+               "Batticaloa", "Ampara", "Kalmune", "Trincomalee",
                "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa",
                "Badulla", "Monaragala", "Ratnapura", "Kegalle"),
   lat = c(6.927, 7.084, 6.585, 7.291, 7.470, 6.970, 6.054, 5.948, 6.124,
@@ -85,19 +78,19 @@ district_coords <- tibble(
           80.025, 80.399, 79.904, 80.497, 80.812, 81.700, 81.672, 81.836, 81.234,
           80.362, 79.840, 80.406, 81.000, 81.056, 81.349, 80.399, 80.349)
 )
+
 yearly_map_data <- left_join(district_coords, annual_district, by = "district")
 
-# Isolate page-specific crosstalk datasets to stop cross-page communications
-trends_shared <- SharedData$new(sl, group = "trends_page")
+districts <- sort(unique(sl$district))
 ```
 
 # Overview
 
-## Row {height="35%"}
+## Row {height="20%"}
 
 ```{r}
 #| content: valuebox
-#| title: "Total Cases (All Time)"
+#| title: "Total Reported Cases"
 list(
   icon  = "virus",
   color = "danger",
@@ -118,7 +111,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Peak Week"
+#| title: "Peak Epi Week"
 list(
   icon  = "calendar-week",
   color = "info",
@@ -126,20 +119,36 @@ list(
 )
 ```
 
-## Row {height="65%"}
+```{r}
+#| content: valuebox
+#| title: "Districts Covered"
+list(
+  icon  = "map",
+  color = "success",
+  value = n_distinct(sl$district)
+)
+```
+
+## Row {height="80%"}
 
 ### Column {width="100%"}
 
-### Core Exploratory Findings & Metadata Summary
+#### About This Dashboard
 
-Welcome to the Dengue Surveillance Dashboard for Sri Lanka. This analytical platform processes structural epidemiological records across all administrative districts to track outbreaks, evaluate seasonal distribution changes, and isolate historical trends.
+This dashboard visualises weekly dengue surveillance data across all 26 administrative districts of Sri Lanka, sourced from the denguedatahub R package, which aggregates reports published by the Epidemiology Unit of the Ministry of Health Sri Lanka. All temporal metrics use Epidemiological Weeks (ISO week standard) rather than calendar dates, consistent with public health reporting conventions.
 
-#### Key Insights Captured:
-* **The High-Burden Corridor:** Preliminary analysis confirms that the Western Province (consisting of Colombo, Gampaha, and Kalutara) bears the highest historical caseload in the country. 
-* **Temporal Outbreak Dynamics:** The country experienced its highest all-time epidemiological transmission threshold during the year 2017, driven by heavy monsoon-associated vector proliferation.
-* **Logical Structuring:** All temporal metrics within this platform have been converted to formal Epidemiological Weeks (Epi Weeks) rather than single days, matching standard public health reporting conventions.
+#### Key Findings
 
-*Navigate through the top tab structure to inspect national trend lines, geographic distributions, individual district breakdowns, and clear database records.*
+**The 2017 Epidemic**
+Sri Lanka's worst dengue outbreak on record occurred in 2017, with 186,101 confirmed cases and 440 deaths reported by the Central Epidemiology Unit — more than three times the annual average of the preceding five years. Cases peaked during the southwest monsoon in June–July 2017, with over 40,000 cases in July alone. The outbreak followed severe flooding in May 2017 that displaced over 600,000 people and created widespread mosquito breeding conditions. *(Source: Ghouse et al., Emerging Infectious Diseases, 2020)*
+
+**Western Province Dominance**
+Approximately 43–44% of all dengue cases nationally are concentrated in the Western Province (Colombo, Gampaha, Kalutara). Colombo district alone recorded 23,574 cases in the first seven months of 2017. This reflects both high population density and urban vector breeding conditions. *(Source: ReliefWeb / WHO Sri Lanka, 2017)*
+
+**Seasonal Transmission Pattern**
+Dengue transmission in Sri Lanka follows a bimodal seasonal pattern tied to the two monsoon seasons — the southwest monsoon (May–August) and the northeast monsoon (November–January) — with the southwest monsoon consistently driving the larger peak.
+
+*Navigate the tabs above to explore national trends, geographic distribution, district-level time series, and the full data repository.*
 
 # National Trends
 
@@ -148,7 +157,7 @@ Welcome to the Dengue Surveillance Dashboard for Sri Lanka. This analytical plat
 ### Column {width="60%"}
 
 ```{r}
-#| title: "Weekly Transmission Volume — National Total Timeline"
+#| title: "Weekly Transmission Volume — National Total"
 dygraph(sl_xts) |>
   dyRangeSelector() |>
   dyOptions(
@@ -163,19 +172,47 @@ dygraph(sl_xts) |>
 ### Column {width="40%"}
 
 ```{r}
-#| title: "Annual Outbreak Aggregations (Top 10 Highest-Burden Districts)"
+#| title: "Annual Cases — Top 10 Highest-Burden Districts"
+#| message: false
+#| warning: false
+
 p_top10 <- annual_district |>
   filter(district %in% top10) |>
-  ggplot(aes(x = year, y = annual_cases, colour = district, group = district,
-             text = paste0("District: ", district, "<br>Year: ", year, "<br>Annual Cases: ", format(annual_cases, big.mark = ",")))) +
-  geom_line(linewidth = 0.7) +
-  geom_point(size = 1.5) +
+  mutate(district = factor(district, levels = top10)) |>
+  ggplot(aes(
+    x      = year,
+    y      = annual_cases,
+    colour = district,
+    group  = district,
+    text   = paste0(
+      "<b>", district, "</b><br>",
+      "Year: ", year, "<br>",
+      "Cases: ", format(annual_cases, big.mark = ",")
+    )
+  )) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
   scale_colour_brewer(palette = "Paired") +
-  labs(x = "Year", y = "Annual Cases", colour = "District") +
-  theme_bw(base_size = 11)
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Annual Cases", colour = NULL) +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position  = "bottom",
+    legend.text      = element_text(size = 8),
+    legend.key.width = unit(1.2, "cm")
+  ) +
+  guides(colour = guide_legend(nrow = 2))
 
-ggplotly(p_top10, tooltip = "text") |> 
-  layout(hovermode = "closest")
+ggplotly(p_top10, tooltip = "text") |>
+  layout(
+    legend = list(
+      orientation = "h",
+      x = 0, y = -0.2,
+      font = list(size = 10)
+    ),
+    hovermode = "closest",
+    margin = list(b = 80)
+  )
 ```
 
 # District Map
@@ -189,8 +226,8 @@ ggplotly(p_top10, tooltip = "text") |>
 #| message: false
 #| warning: false
 
-max_cases <- max(yearly_map_data$annual_cases, na.rm = TRUE)
-pal <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
+max_cases  <- max(yearly_map_data$annual_cases, na.rm = TRUE)
+pal        <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
 years_list <- sort(unique(yearly_map_data$year))
 
 m <- leaflet() |>
@@ -204,20 +241,21 @@ for (yr in years_list) {
       data        = d,
       lng         = ~lon,
       lat         = ~lat,
-      radius      = ~pmax(sqrt(annual_cases) / 10, 3),
+      radius      = ~pmax(sqrt(annual_cases) / 4, 3),
       color       = ~pal(annual_cases),
       fillColor   = ~pal(annual_cases),
       fillOpacity = 0.85,
       opacity     = 1,
-      popup       = ~paste0("<b>District:</b> ", district,
-                            "<br><b>Year:</b> ", year,
-                            "<br><b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")),
-      label       = ~district,
-      group       = as.character(yr)
+      popup       = ~paste0(
+        "<b>District:</b> ", district, "<br>",
+        "<b>Year:</b> ", year, "<br>",
+        "<b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")
+      ),
+      label = ~district,
+      group = as.character(yr)
     )
 }
 
-# Position explicitly moved to "bottomleft" to fix visibility issues
 m |>
   addLayersControl(
     baseGroups = as.character(years_list),
@@ -231,122 +269,205 @@ m |>
   )
 ```
 
-### Annual Case Matrix (All 26 Districts)
+### Annual Case Matrix
 
 ```{r}
-#| title: "Comparative District Timelines (Replaces Broken Animation)"
-p_matrix <- ggplot(annual_district, aes(x = year, y = reorder(district, annual_cases, sum), fill = annual_cases,
-                        text = paste0("District: ", district, "<br>Year: ", year, "<br>Cases: ", format(annual_cases, big.mark = ",")))) +
+#| title: "District × Year Case Intensity"
+p_matrix <- ggplot(
+  annual_district,
+  aes(
+    x    = year,
+    y    = reorder(district, annual_cases, sum),
+    fill = annual_cases,
+    text = paste0(
+      "<b>", district, "</b><br>",
+      "Year: ", year, "<br>",
+      "Cases: ", format(annual_cases, big.mark = ",")
+    )
+  )
+) +
   geom_tile(color = "white", linewidth = 0.1) +
-  scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "Cases", labels = scales::comma) +
-  labs(x = "Reporting Year", y = "") +
-  theme_minimal(base_size = 11)
+  scale_fill_distiller(
+    palette   = "YlOrRd",
+    direction = 1,
+    name      = "Cases",
+    labels    = scales::comma
+  ) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  labs(x = "Year", y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.y     = element_text(size = 9),
+    axis.text.x     = element_text(size = 9),
+    legend.position = "right"
+  )
 
-ggplotly(p_matrix, tooltip = "text") |> 
-  layout(margin = list(l = 100, r = 20, t = 30, b = 50))
+ggplotly(p_matrix, tooltip = "text") |>
+  layout(margin = list(l = 110, r = 20, t = 20, b = 50))
 ```
 
-# Interactive Trends
-
-## Sidebar {.sidebar}
-
-```{r}
-filter_select(
-  id         = "trends_district_chooser",
-  label      = "Isolate Specific District Line:",
-  sharedData = trends_shared,
-  group      = ~district,
-  multiple   = FALSE
-)
-```
-
----
-
-*Use the isolated drop-down menu above to select a single district line. This page functions independently to eliminate cross-widget clutter.*
+# District Overview
 
 ## Row
 
 ```{r}
-#| title: "Weekly Trajectory Analysis by Selected District"
+#| title: "Weekly Dengue Cases by District — All Sri Lanka"
+#| message: false
+#| warning: false
 
-plot_ly(trends_shared, x = ~start.date, y = ~cases, color = ~district, 
-        colors = "Set2", type = 'scatter', mode = 'lines',
-        text = ~paste0("District: ", district, "<br>Epi Week: ", epi_week, "<br>Weekly Cases: ", cases),
-        hoverinfo = "text") |>
-  layout(
-    xaxis = list(title = "Timeline (Zoomable Grid)"),
-    yaxis = list(title = "Observed Cases"),
-    showlegend = TRUE
+sl |>
+  ggplot(aes(x = start.date, y = cases)) +
+  geom_line(colour = "#c0392b", linewidth = 0.3, alpha = 0.8) +
+  facet_wrap(
+    ~district,
+    ncol   = 5,
+    scales = "free_y"
+  ) +
+  scale_x_date(date_breaks = "4 years", date_labels = "%Y") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Weekly Cases") +
+  theme_bw(base_size = 8) +
+  theme(
+    axis.text.x      = element_text(angle = 45, hjust = 1, size = 6),
+    axis.text.y      = element_text(size = 6),
+    strip.text       = element_text(face = "bold", size = 7),
+    panel.spacing    = unit(0.4, "lines")
   )
 ```
 
-# District Deep Dive
+# District Distributions
 
-## Row {.tabset}
+## Row {height="100%"}
 
 ```{r}
-#| results: asis
-#| echo: false
+#| title: "Weekly Case Distribution — Top 10 Districts (Violin + Boxplot)"
+#| message: false
+#| warning: false
 
-all_districts <- sort(unique(sl$district))
-
-for (i in seq_along(all_districts)) {
-  current_dist <- all_districts[i]
-  
-  cat(paste0("### ", current_dist, "\n\n"))
-  
-  # Filter data for specific iteration
-  dist_data <- sl |> filter(district == current_dist)
-  
-  # 1. STL Decomposition Calculation
-  dist_ts <- dist_data |>
-    mutate(year_week = yearweek(start.date)) |>
-    distinct(year_week, .keep_all = TRUE) |>
-    arrange(year_week) |>
-    as_tsibble(index = year_week)
-  
-  stl_model <- dist_ts |>
-    model(STL(cases ~ season(period = 52))) |>
-    components()
-  
-  p_stl <- autoplot(stl_model) + 
-    theme_bw(base_size = 9) + 
-    labs(x = NULL, title = paste(current_dist, "— Temporal Dissection (Trend & Seasonality)"))
-  
-  # 2. High-Contrast Yellow-Orange-Red Heatmap
-  p_heat <- dist_data |>
-    mutate(Year = fct_rev(factor(year(start.date))), Week = isoweek(start.date)) |>
-    ggplot(aes(x = Week, y = Year, fill = cases,
-               text = paste0("Year: ", year(start.date), "<br>Week: ", Week, "<br>Cases: ", cases))) +
-    geom_tile(colour = "white", linewidth = 0.1) +
-    scale_fill_viridis_c(option = "YlOrRd", name = "Cases") +
-    labs(x = "Calendar Week of Year", y = "Year", title = paste(current_dist, "— Outbreak Grid Density")) +
-    theme_minimal(base_size = 9)
-  
-  # Stitch components side-by-side using an elegant dynamic subplot widget structure
-  sub_plot <- subplot(
-    ggplotly(p_stl), 
-    ggplotly(p_heat, tooltip = "text") |> layout(hovermode = "closest"), 
-    nrows = 2, margin = 0.07, titleY = TRUE
+p_violin <- sl |>
+  filter(district %in% top10) |>
+  mutate(district = reorder(district, cases, median)) |>
+  ggplot(aes(
+    x    = district,
+    y    = cases,
+    fill = district,
+    text = paste0("<b>", district, "</b><br>Cases: ", cases)
+  )) +
+  geom_violin(alpha = 0.6, linewidth = 0.3) +
+  geom_boxplot(
+    width        = 0.12,
+    outlier.size = 0.8,
+    fill         = "white",
+    alpha        = 0.8
+  ) +
+  scale_fill_brewer(palette = "Paired") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Weekly Cases") +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "none",
+    axis.text.x     = element_text(angle = 30, hjust = 1, size = 10)
   )
-  
-  print(htmltools::tagList(sub_plot))
-  cat("\n\n")
+
+ggplotly(p_violin, tooltip = "text") |>
+  layout(showlegend = FALSE)
+```
+
+# Interactive Trends
+
+## Row
+
+```{r}
+#| title: "Weekly Case Trajectory by District"
+#| message: false
+#| warning: false
+
+traces <- lapply(seq_along(districts), function(i) {
+  d <- sl |> filter(district == districts[i])
+  list(
+    x         = d$start.date,
+    y         = d$cases,
+    type      = "scatter",
+    mode      = "lines",
+    name      = districts[i],
+    visible   = if (i == 1) TRUE else FALSE,
+    text      = paste0(
+      "<b>", d$district, "</b><br>",
+      "Epi Week: ", d$epi_week, "<br>",
+      "Cases: ", d$cases
+    ),
+    hoverinfo = "text",
+    line      = list(color = "#2980b9", width = 1.2)
+  )
+})
+
+buttons <- lapply(seq_along(districts), function(i) {
+  vis    <- rep(FALSE, length(districts))
+  vis[i] <- TRUE
+  list(
+    method = "update",
+    args   = list(list(visible = as.list(vis))),
+    label  = districts[i]
+  )
+})
+
+p <- plot_ly()
+for (tr in traces) {
+  p <- add_trace(
+    p,
+    x         = tr$x,
+    y         = tr$y,
+    type      = tr$type,
+    mode      = tr$mode,
+    name      = tr$name,
+    visible   = tr$visible,
+    text      = tr$text,
+    hoverinfo = tr$hoverinfo,
+    line      = tr$line
+  )
 }
+
+p |>
+  layout(
+    updatemenus = list(list(
+      type    = "dropdown",
+      active  = 0,
+      buttons = buttons,
+      x       = 0,
+      xanchor = "left",
+      y       = 1.15,
+      yanchor = "top"
+    )),
+    xaxis      = list(title = "Date"),
+    yaxis      = list(title = "Weekly Cases", tickformat = ","),
+    showlegend = FALSE,
+    margin     = list(t = 80)
+  )
 ```
 
 # Data
 
 ```{r}
-#| title: "Independent Data Repository Browser"
+#| title: "Sri Lanka Weekly Dengue Surveillance Records"
+#| message: false
+#| warning: false
 
-# Standard dataframe passed directly to isolate search metrics and stop background cross-filtering
 sl |>
   select(epi_week, district, cases) |>
-  rename(`Epidemiological Week` = epi_week, District = district, `Registered Cases` = cases) |>
+  rename(
+    `Epidemiological Week` = epi_week,
+    District               = district,
+    `Reported Cases`       = cases
+  ) |>
   datatable(
     filter   = "top",
     rownames = FALSE,
-    options  = list(pageLength = 15, scrollX = TRUE)
+    options  = list(
+      pageLength = 15,
+      scrollX    = TRUE,
+      dom        = "Bfrtip",
+      buttons    = c("copy", "csv", "excel")
+    ),
+    extensions = "Buttons"
   )
 ```
