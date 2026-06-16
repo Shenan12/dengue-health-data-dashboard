@@ -67,9 +67,13 @@ h1, h2, h3, h4, h5, h6,
   color: var(--dhd-text) !important;
 }
 
+.quarto-dashboard .bslib-value-box .value-box-value {
+  font-size: 2.7rem !important;
+}
+
 .quarto-dashboard .bslib-value-box .value-box-showcase .bi {
   color: #2f6dd5;
-  font-size: 1.4rem;
+  font-size: 2.4rem;
 }
 
 .quarto-dashboard .bslib-value-box.bg-danger { border-top: 4px solid #dc3545; }

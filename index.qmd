@@ -21,6 +21,8 @@ library(tsibble)
 library(feasts)
 library(fabletools)
 library(DT)
+library(dygraphs)
+library(xts)
 library(leaflet)
 library(denguedatahub)
 ```
@@ -39,14 +41,12 @@ data(sl_dengue_serotype)
 #| message: false
 #| warning: false
 
-# 1. Clean data and permanently attach the Epidemiological Week label
 sl <- srilanka_weekly_data |>
   mutate(start.date = parse_date_time(start.date, orders = c("mdy", "ymd"))) |>
   mutate(start.date = as.Date(start.date)) |>
   mutate(epi_week = paste0(year(start.date), " - Week ", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
-# 2. National Totals (by Week)
 sl_total <- sl |>
   group_by(start.date) |>
   summarise(
@@ -55,20 +55,17 @@ sl_total <- sl |>
     .groups  = "drop"
   )
 
-# 3. Annual Totals by District
 annual_district <- sl |>
   mutate(year = year(start.date)) |>
   group_by(district, year) |>
   summarise(annual_cases = sum(cases, na.rm = TRUE), .groups = "drop")
 
-# Identify top burden regions for the line graphs
 top10 <- annual_district |>
   group_by(district) |>
   summarise(total = sum(annual_cases), .groups = "drop") |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# 4. Geographic Coordinates
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
                "NuwaraEliya", "Galle", "Matara", "Hambanthota",
@@ -87,7 +84,6 @@ yearly_map_data <- left_join(district_coords, annual_district, by = "district")
 
 districts <- sort(unique(sl$district))
 
-# 5. Format the Time-Series Object for STL math
 sl_ts <- sl_total |>
   mutate(year_week = yearweek(start.date)) |>
   as_tsibble(index = year_week) |>
@@ -96,7 +92,7 @@ sl_ts <- sl_total |>
 
 # Overview
 
-## Row {height="40%"}
+## Row {height="25%"}
 
 ```{r}
 #| content: valuebox
@@ -110,7 +106,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Highest number of recorded Weekly Cases"
+#| title: "Highest Weekly Case Count"
 peak <- sl_total |> slice_max(cases, n = 1, with_ties = FALSE)
 list(
   icon  = "arrow-up-circle",
@@ -129,7 +125,7 @@ list(
 )
 ```
 
-## Row {height="60%"}
+## Row {height="75%"}
 
 ### Column {width="100%"}
 
@@ -143,12 +139,12 @@ This dashboard provides an interactive exploration of weekly dengue surveillance
 
 - **Overview** provides a summary of the national dengue situation and key surveillance indicators.
 - **National Trends** displays long-term patterns in dengue incidence and compares annual case burdens across high-incidence districts.
-- **Interactive Trends** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector.
+- **Interactive Trends** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector, with a zoomable range slider for fine-grained time navigation.
 - **Trend & Seasonality** presents an STL decomposition that separates observed dengue incidence into long-term trend, recurring seasonal patterns, and irregular variation.
-- **District Map** visualizes the geographic distribution of annual dengue cases across Sri Lanka.
+- **Map by Year** visualizes the geographic distribution of annual dengue cases across Sri Lanka.
+- **Annual Case Matrix** A heatmap of how the dengue cases spread across the years in Sri Lanka.
 - **Serotypes** shows the historical circulation of dengue virus serotypes reported in Sri Lanka.
 - **Data** provides access to the surveillance records and serotype data used throughout the dashboard.
-
 
 #### Data Source
 
@@ -165,7 +161,7 @@ Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga 
 ### Column {width="50%"}
 
 ```{r}
-#| title: "Weekly Transmission Volume — National Total"
+#| title: "National Weekly Reported Cases"
 p_nat <- plot_ly(sl_total, x = ~start.date, y = ~cases, type = 'scatter', mode = 'lines',
                  line = list(color = "#c0392b", width = 1.5),
                  fill = 'tozeroy', fillcolor = 'rgba(192, 57, 43, 0.12)',
@@ -187,7 +183,6 @@ p_nat
 #| message: false
 #| warning: false
 
-# Rewritten in native plot_ly to guarantee fullscreen width scaling
 annual_district |>
   filter(district %in% top10) |>
   mutate(district = factor(district, levels = top10)) |>
@@ -218,11 +213,10 @@ annual_district |>
 ## Row
 
 ```{r}
-#| title: "Weekly Case Trajectory by District"
+#| title: "Weekly Dengue Cases by District"
 #| message: false
 #| warning: false
 
-# Traces configured strictly for Epi Weeks
 traces <- lapply(seq_along(districts), function(i) {
   d <- sl |> filter(district == districts[i])
   list(
@@ -271,12 +265,25 @@ p_interactive |>
       y       = 1.15,
       yanchor = "top"
     )),
-    xaxis      = list(title = "Timeline (Epi Weeks)", tickformat = "%Y - Week %V"),
+    xaxis = list(
+      title = "Timeline (Epi Weeks)",
+      tickformat = "%Y - Week %V",
+      rangeslider = list(visible = TRUE),
+      rangeselector = list(
+        buttons = list(
+          list(count = 1, label = "1y", step = "year", stepmode = "backward"),
+          list(count = 3, label = "3y", step = "year", stepmode = "backward"),
+          list(count = 5, label = "5y", step = "year", stepmode = "backward"),
+          list(step = "all", label = "All")
+        )
+      )
+    ),
     yaxis      = list(title = "Weekly Cases", tickformat = ","),
     showlegend = FALSE,
-    margin     = list(t = 80)
+    margin     = list(t = 110)
   )
 ```
+
 # Trend & Seasonality
 
 ## Row {height="10%"}
@@ -290,12 +297,10 @@ STL (Seasonal-Trend decomposition using Loess) separates the observed dengue cas
 #| message: false
 #| warning: false
 
-# Safely run STL using the sl_ts object you already built in the clean-data chunk
 dcmp <- sl_ts |>
   model(STL(cases ~ season(period = 52), robust = TRUE)) |>
   components()
 
-# Data is re-formatted to strip dates out of the tooltip
 p_dcmp_data <- dcmp |>
   as_tibble() |>
   mutate(
@@ -335,14 +340,10 @@ ggplotly(p_dcmp, tooltip = "text") |>
   )
 ```
 
-# District Map
-
-## Row {.tabset}
-
-### Map by Year
+# Map by Year
 
 ```{r}
-#| title: "Geographic Spread by Selected Year"
+#| title: "Annual Dengue Cases by District"
 #| message: false
 #| warning: false
 
@@ -389,7 +390,7 @@ m |>
   )
 ```
 
-### Annual Case Matrix
+# Annual Case Matrix
 
 ```{r}
 #| title: "District × Year Case Intensity"
@@ -470,7 +471,6 @@ ggplotly(p_sero, tooltip = "text") |>
 #| message: false
 #| warning: false
 
-# start.date is explicitly removed so only epi_week is visible
 sl |>
   select(epi_week, district, cases) |>
   rename(
