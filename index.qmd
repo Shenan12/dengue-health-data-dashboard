@@ -5,7 +5,8 @@ format:
   dashboard:
     theme: flatly
     css: custom.css
-favicon: icon.png
+include-in-header:
+  text: '<link rel="icon" type="image/png" href="icon.png?v=2">'
 resources:
   - icon.png
   - Aedes_aegypti_feeding.jpg
