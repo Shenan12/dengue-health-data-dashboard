@@ -96,7 +96,7 @@ sl_ts <- sl_total |>
 
 # Overview
 
-## Row {height="35%"}
+## Row {height="40%"}
 
 ```{r}
 #| content: valuebox
@@ -110,7 +110,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Peak Weekly Cases"
+#| title: "Highest number of recorded Weekly Cases"
 peak <- sl_total |> slice_max(cases, n = 1, with_ties = FALSE)
 list(
   icon  = "arrow-up-circle",
@@ -121,7 +121,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Peak Epidemiological Week"
+#| title: "Week with Highest Cases"
 list(
   icon  = "calendar-week",
   color = "info",
@@ -129,28 +129,34 @@ list(
 )
 ```
 
-## Row {height="65%"}
+## Row {height="60%"}
 
 ### Column {width="100%"}
 
-#### About This Dashboard
+#### About Dengue and This Dashboard
 
-Weekly dengue surveillance across Sri Lanka's 26 districts (2006–present), sourced from the `denguedatahub` R package (Epidemiology Unit, Ministry of Health). All timelines are standardized to ISO Epidemiological Weeks to align with public health reporting parameters.
+Dengue is a mosquito-borne viral disease transmitted primarily by *Aedes aegypti* mosquitoes. Infection can cause symptoms ranging from mild fever and headache to more severe complications that may require hospitalization. As dengue remains a major public health concern in Sri Lanka, continuous surveillance is important for identifying outbreaks, monitoring transmission patterns, and supporting public health interventions.
 
-#### Key Findings
+This dashboard provides an interactive exploration of weekly dengue surveillance data reported across Sri Lanka through the `denguedatahub` package. The visualizations allow users to examine national trends, compare districts, investigate seasonal patterns, explore geographic variation, and review historical dengue serotype information.
 
-**2017 Epidemic** — Sri Lanka's worst outbreak on record: 186,101 cases and 440 deaths nationally, peaking June–July during the southwest monsoon, following severe flooding in May 2017. 
+#### How to Use the Dashboard
 
-**Western Province Dominance** — Colombo, Gampaha, and Kalutara together account for the largest single concentration of national cases, reflecting urban population density and vector breeding conditions.
+- **Overview** provides a summary of the national dengue situation and key surveillance indicators.
+- **National Trends** displays long-term patterns in dengue incidence and compares annual case burdens across high-incidence districts.
+- **Interactive Trends** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector.
+- **Trend & Seasonality** presents an STL decomposition that separates observed dengue incidence into long-term trend, recurring seasonal patterns, and irregular variation.
+- **District Map** visualizes the geographic distribution of annual dengue cases across Sri Lanka.
+- **Serotypes** shows the historical circulation of dengue virus serotypes reported in Sri Lanka.
+- **Data** provides access to the surveillance records and serotype data used throughout the dashboard.
 
-**Seasonality** — Transmission is bimodal, tracking the two monsoons (southwest: May–Aug, northeast: Nov–Jan), with the southwest monsoon driving the larger peak. See the *Trend & Seasonality* tab for a formal statistical decomposition.
 
-*Navigate the tabs above to explore trends, seasonality, geography, serotypes, and the full data repository.*
+#### Data Source
+
+Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga Talagala and collaborators.
 
 <br>
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Aedes_aegypti_CDC-Gathany.jpg/800px-Aedes_aegypti_CDC-Gathany.jpg" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
-
 
 # National Trends
 
@@ -273,7 +279,11 @@ p_interactive |>
 ```
 # Trend & Seasonality
 
-## Row {height="100%"}
+## Row {height="10%"}
+
+STL (Seasonal-Trend decomposition using Loess) separates the observed dengue case series into three components: a long-term trend, recurring seasonal patterns, and an irregular remainder. This helps identify underlying transmission patterns that may not be immediately visible in the raw data.
+
+## Row {height="90%"}
 
 ```{r}
 #| title: "STL Decomposition — National Weekly Cases"
