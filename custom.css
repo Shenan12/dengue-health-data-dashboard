@@ -1,0 +1,168 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+:root {
+  --dhd-bg: #f8f9fa;
+  --dhd-navy: #1a1f2e;
+  --dhd-text: #1f2937;
+  --dhd-muted: #5c667a;
+  --dhd-border: #e6e9ef;
+  --dhd-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+}
+
+body.quarto-dashboard {
+  background: var(--dhd-bg);
+  color: var(--dhd-text);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6,
+.navbar-title-text a,
+.value-box-title {
+  font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+
+#quarto-dashboard-header .navbar {
+  background: var(--dhd-navy) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#quarto-dashboard-header .navbar .navbar-title-text a,
+#quarto-dashboard-header .navbar .navbar-author,
+#quarto-dashboard-header .navbar .nav-link {
+  color: #ffffff !important;
+}
+
+#quarto-dashboard-header .navbar .nav-link {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.78) !important;
+  font-weight: 500;
+  padding: 0.9rem 0.85rem;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+#quarto-dashboard-header .navbar .nav-link.active,
+#quarto-dashboard-header .navbar .nav-link:hover {
+  border-bottom-color: #79b8ff;
+  color: #ffffff !important;
+}
+
+.quarto-dashboard .bslib-card {
+  background: #ffffff;
+  border: 1px solid var(--dhd-border);
+  border-radius: 12px;
+  box-shadow: var(--dhd-shadow);
+  overflow: hidden;
+}
+
+.quarto-dashboard .bslib-value-box {
+  background: #ffffff !important;
+  border-radius: 8px !important;
+  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.08);
+  color: var(--dhd-text) !important;
+}
+
+.quarto-dashboard .bslib-value-box .value-box-value,
+.quarto-dashboard .bslib-value-box .value-box-title {
+  color: var(--dhd-text) !important;
+}
+
+.quarto-dashboard .bslib-value-box .value-box-showcase .bi {
+  color: #2f6dd5;
+  font-size: 1.4rem;
+}
+
+.quarto-dashboard .bslib-value-box.bg-danger { border-top: 4px solid #dc3545; }
+.quarto-dashboard .bslib-value-box.bg-warning { border-top: 4px solid #e0a800; }
+.quarto-dashboard .bslib-value-box.bg-info { border-top: 4px solid #0ea5e9; }
+
+.quarto-dashboard [data-icon="calendar-week"] .value-box-showcase .bi-calendar-week::before {
+  content: "📅";
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif !important;
+}
+
+.quarto-dashboard .card.tabset .card-header {
+  background: #ffffff;
+  border-bottom: 1px solid var(--dhd-border);
+}
+
+.quarto-dashboard .card.tabset .nav-tabs {
+  border-bottom: none;
+  gap: 0.8rem;
+}
+
+.quarto-dashboard .card.tabset .nav-tabs .nav-link {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--dhd-muted);
+  font-weight: 600;
+  padding: 0.7rem 0.25rem;
+}
+
+.quarto-dashboard .card.tabset .nav-tabs .nav-link.active,
+.quarto-dashboard .card.tabset .nav-tabs .nav-link:hover {
+  border-bottom-color: #2f6dd5;
+  color: #1f2937;
+}
+
+.quarto-dashboard .html-widget,
+.quarto-dashboard .js-plotly-plot,
+.quarto-dashboard .leaflet-container {
+  border-radius: 10px;
+}
+
+#interactive-trends .card .card-body {
+  background: linear-gradient(90deg, #edf1f7 0 16rem, #ffffff 16rem 100%);
+}
+
+#overview img[src*="Aedes_aegypti"] {
+  background: #e8edf5;
+  border-radius: 8px !important;
+  display: block;
+  max-height: 250px !important;
+  object-fit: cover;
+  width: 100% !important;
+}
+
+table.dataTable tbody tr:nth-child(odd) {
+  background: #f4f7fb !important;
+}
+
+table.dataTable tbody tr:nth-child(even) {
+  background: #ffffff !important;
+}
+
+table.dataTable tbody tr:hover {
+  background: #e8eef8 !important;
+}
+
+@media (max-width: 1280px) {
+  #quarto-dashboard-header .navbar .nav-link {
+    padding: 0.75rem 0.6rem;
+  }
+
+  .quarto-dashboard .bslib-card .card-body {
+    padding: 1rem;
+  }
+
+  #interactive-trends .card .card-body {
+    background: linear-gradient(90deg, #edf1f7 0 12rem, #ffffff 12rem 100%);
+  }
+}
+
+@media (max-width: 1024px) {
+  #quarto-dashboard-header .navbar .navbar-title-text a {
+    font-size: 1rem;
+  }
+
+  #quarto-dashboard-header .navbar .nav-link {
+    font-size: 0.92rem;
+    padding: 0.65rem 0.45rem;
+  }
+
+  #interactive-trends .card .card-body {
+    background: #ffffff;
+  }
+}
