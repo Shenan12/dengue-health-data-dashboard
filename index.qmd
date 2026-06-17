@@ -148,7 +148,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Highest Weekly Case Count"
+#| title: "Highest Weekly Reported Case Count"
 peak <- sl_total |> slice_max(cases, n = 1, with_ties = FALSE)
 list(
   icon  = "arrow-up-circle",
@@ -159,7 +159,7 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: "Week with Highest Cases"
+#| title: "Week with Highest Reported Cases"
 list(
   icon  = "calendar-week",
   color = "info",
