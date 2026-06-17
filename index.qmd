@@ -222,7 +222,7 @@ p_nat
 ### Column {width="50%"}
 
 ```{r}
-#| title: "Annual Cases — Top 10 Highest-Burden Districts"
+#| title: "Annual Reported Cases — Top 10 Highest-Burden Districts"
 #| message: false
 #| warning: false
 
@@ -261,7 +261,7 @@ STL (Seasonal-Trend decomposition using Loess) separates the observed dengue cas
 ## Row {height="90%"}
 
 ```{r}
-#| title: "STL Decomposition — National Weekly Cases"
+#| title: "STL Decomposition — National Reported Weekly Cases"
 #| message: false
 #| warning: false
 
@@ -313,7 +313,7 @@ ggplotly(p_dcmp, tooltip = "text") |>
 ## Row
 
 ```{r}
-#| title: "Weekly Dengue Cases by District"
+#| title: "Weekly Reported Dengue Cases by District"
 #| message: false
 #| warning: false
 
@@ -391,7 +391,7 @@ p_interactive |>
 ### Map by Year
 
 ```{r}
-#| title: "Annual Dengue Cases by Health District (Filled)"
+#| title: "Annual Reported Dengue Cases by Health District"
 #| message: false
 #| warning: false
 
