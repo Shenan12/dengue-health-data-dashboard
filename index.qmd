@@ -28,6 +28,7 @@ library(dygraphs)
 library(xts)
 library(leaflet)
 library(denguedatahub)
+library(sf)
 ```
 
 ```{r}
@@ -69,6 +70,7 @@ top10 <- annual_district |>
   slice_max(total, n = 10) |>
   pull(district)
 
+# --- DATA FOR POINT MAP (Original with Kalmune) ---
 district_coords <- tibble(
   district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
                "NuwaraEliya", "Galle", "Matara", "Hambanthota",
@@ -84,6 +86,57 @@ district_coords <- tibble(
           80.362, 79.840, 80.406, 81.000, 81.056, 81.349, 80.399, 80.349)
 )
 yearly_map_data <- left_join(district_coords, annual_district, by = "district")
+
+
+# --- DATA FOR CHOROPLETH MAP (Polygons) ---
+api_url <- "https://www.geoboundaries.org/api/current/gbOpen/LKA/ADM2/"
+api_data <- jsonlite::fromJSON(api_url)
+
+# Download and fiercely standardize the shapefile names
+sl_sf <- read_sf(api_data$simplifiedGeometryGeoJSON) |>
+  rename_with(tolower) |>
+  mutate(
+    shapename_disp = str_to_title(shapename), 
+    join_name = str_to_lower(str_replace_all(shapename, "[^a-zA-Z]", "")),
+    join_name = case_when(
+      join_name == "mullaittivu" ~ "mullaitivu",
+      join_name == "hambanthota" ~ "hambantota",
+      join_name == "moneragala"  ~ "monaragala",
+      TRUE ~ join_name
+    )
+  )
+
+# Standardize the dengue data names exactly the same way
+map_data_clean <- annual_district |>
+  mutate(
+    district_clean = as.character(district),
+    district_clean = if_else(district_clean == "Kalmune", "Ampara", district_clean),
+    join_name = str_to_lower(str_replace_all(district_clean, "[^a-zA-Z]", "")),
+    join_name = case_when(
+      join_name == "mullaittivu" ~ "mullaitivu",
+      join_name == "hambanthota" ~ "hambantota",
+      join_name == "moneragala"  ~ "monaragala",
+      TRUE ~ join_name
+    )
+  ) |>
+  group_by(join_name, year) |>
+  summarise(annual_cases = sum(annual_cases, na.rm = TRUE), .groups = "drop")
+
+# Create the grid so every district has a row for every year
+grid <- expand_grid(
+  join_name = na.omit(unique(sl_sf$join_name)),
+  year      = na.omit(unique(map_data_clean$year))
+)
+
+# FIXED: Joined by BOTH join_name and year so it doesn't break the columns
+map_data_full <- grid |>
+  left_join(map_data_clean, by = c("join_name", "year")) |>
+  mutate(annual_cases = replace_na(annual_cases, 0))
+
+# Join the full data back to the spatial polygons
+yearly_map_data_sf <- sl_sf |>
+  left_join(map_data_full, by = "join_name") |>
+  filter(!is.na(year))
 
 districts <- sort(unique(sl$district))
 
@@ -255,7 +308,7 @@ p_dcmp <- ggplot(p_dcmp_data, aes(
       "<b>", component, "</b><br>",
       epi_week, "<br>",
       "Value: ", round(value, 1)
-  ))) +
+    ))) +
   geom_line(colour = "#2980b9", linewidth = 0.5) +
   facet_wrap(~component, ncol = 1, scales = "free_y") +
   labs(x = "Timeline (Epi Weeks)", y = "Weekly Cases") +
@@ -268,6 +321,7 @@ ggplotly(p_dcmp, tooltip = "text") |>
     xaxis  = list(tickformat = "%Y - Week %V")
   )
 ```
+
 # District Explorer
 
 ## Row
@@ -351,28 +405,85 @@ p_interactive |>
 ### Map by Year
 
 ```{r}
-#| title: "Annual Dengue Cases by District"
+#| title: "Annual Dengue Cases by District (Filled)"
 #| message: false
 #| warning: false
 
-max_cases  <- max(yearly_map_data$annual_cases, na.rm = TRUE)
-pal        <- colorNumeric(palette = "Reds", domain = c(0, max_cases))
-years_list <- sort(unique(yearly_map_data$year))
+max_cases_poly  <- max(yearly_map_data_sf$annual_cases, na.rm = TRUE)
+if(is.infinite(max_cases_poly) || max_cases_poly == 0) max_cases_poly <- 1 # Failsafe
 
-m <- leaflet() |>
-  addTiles() |>
+pal_poly        <- colorNumeric(palette = "Reds", domain = c(0, max_cases_poly))
+years_list_poly <- sort(unique(yearly_map_data_sf$year))
+
+m_poly <- leaflet() |>
+  addProviderTiles("CartoDB.Positron") |>
   setView(lng = 80.7, lat = 7.8, zoom = 7)
 
-for (yr in years_list) {
-  d <- yearly_map_data |> filter(year == yr)
-  m <- m |>
+# Loop to add each year's data as a separate polygon layer
+for (yr in years_list_poly) {
+  d_poly <- yearly_map_data_sf |> filter(year == yr)
+  m_poly <- m_poly |>
+    addPolygons(
+      data        = d_poly,
+      fillColor   = ~pal_poly(annual_cases),
+      fillOpacity = 0.85,
+      color       = "#ffffff",   
+      weight      = 1,
+      opacity     = 1,
+      popup       = ~paste0(
+        "<b>District:</b> ", shapename_disp, "<br>",
+        "<b>Year:</b> ", year, "<br>",
+        "<b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")
+      ),
+      label       = ~shapename_disp,
+      group       = as.character(yr),
+      highlightOptions = highlightOptions(
+        weight       = 2,
+        color        = "#666",
+        fillOpacity  = 0.9,
+        bringToFront = TRUE
+      )
+    )
+}
+
+m_poly |>
+  addLayersControl(
+    baseGroups = as.character(years_list_poly),
+    options    = layersControlOptions(collapsed = FALSE)
+  ) |>
+  addLegend(
+    pal      = pal_poly,
+    values   = c(0, max_cases_poly),
+    title    = "Annual Cases",
+    position = "bottomleft"
+  )
+```
+
+### Map by Year (with kalmunei as well)
+
+```{r}
+#| title: "Annual Dengue Cases by Health District"
+#| message: false
+#| warning: false
+
+max_cases_pt  <- max(yearly_map_data$annual_cases, na.rm = TRUE)
+pal_pt        <- colorNumeric(palette = "Reds", domain = c(0, max_cases_pt))
+years_list_pt <- sort(unique(yearly_map_data$year))
+
+m_pt <- leaflet() |>
+  addProviderTiles("CartoDB.Positron") |>
+  setView(lng = 80.7, lat = 7.8, zoom = 7)
+
+for (yr in years_list_pt) {
+  d_pt <- yearly_map_data |> filter(year == yr)
+  m_pt <- m_pt |>
     addCircleMarkers(
-      data        = d,
+      data        = d_pt,
       lng         = ~lon,
       lat         = ~lat,
       radius      = ~pmax(sqrt(annual_cases) / 4, 3),
-      color       = ~pal(annual_cases),
-      fillColor   = ~pal(annual_cases),
+      color       = ~pal_pt(annual_cases),
+      fillColor   = ~pal_pt(annual_cases),
       fillOpacity = 0.85,
       opacity     = 1,
       popup       = ~paste0(
@@ -385,14 +496,14 @@ for (yr in years_list) {
     )
 }
 
-m |>
+m_pt |>
   addLayersControl(
-    baseGroups = as.character(years_list),
+    baseGroups = as.character(years_list_pt),
     options    = layersControlOptions(collapsed = FALSE)
   ) |>
   addLegend(
-    pal      = pal,
-    values   = c(0, max_cases),
+    pal      = pal_pt,
+    values   = c(0, max_cases_pt),
     title    = "Annual Cases",
     position = "bottomleft"
   )
@@ -494,6 +605,7 @@ sl_dengue_serotype |>
     margin = list(l = 80)
   )
 ```
+
 # Data
 
 ## Row {.tabset}
