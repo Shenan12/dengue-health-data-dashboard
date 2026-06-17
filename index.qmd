@@ -29,6 +29,7 @@ library(xts)
 library(leaflet)
 library(denguedatahub)
 library(sf)
+library(ceylon)
 ```
 
 ```{r}
@@ -70,31 +71,16 @@ top10 <- annual_district |>
   slice_max(total, n = 10) |>
   pull(district)
 
-# --- DATA FOR POINT MAP (Original with Kalmune) ---
-district_coords <- tibble(
-  district = c("Colombo", "Gampaha", "Kalutara", "Kandy", "Matale",
-               "NuwaraEliya", "Galle", "Matara", "Hambanthota",
-               "Jaffna", "Kilinochchi", "Mannar", "Vavuniya", "Mullaitivu",
-               "Batticaloa", "Ampara", "Kalmune", "Trincomalee",
-               "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa",
-               "Badulla", "Monaragala", "Ratnapura", "Kegalle"),
-  lat = c(6.927, 7.084, 6.585, 7.291, 7.470, 6.970, 6.054, 5.948, 6.124,
-          9.661, 9.395, 8.978, 8.751, 9.267, 7.717, 7.284, 7.414, 8.587,
-          7.486, 8.036, 8.335, 7.939, 6.989, 6.873, 6.680, 7.253),
-  lon = c(79.861, 80.007, 79.960, 80.636, 80.624, 80.783, 80.221, 80.536, 81.119,
-          80.025, 80.399, 79.904, 80.497, 80.812, 81.700, 81.672, 81.836, 81.234,
-          80.362, 79.840, 80.406, 81.000, 81.056, 81.349, 80.399, 80.349)
-)
-yearly_map_data <- left_join(district_coords, annual_district, by = "district")
-
 
 # --- DATA FOR CHOROPLETH MAP (Polygons) ---
-api_url <- "https://www.geoboundaries.org/api/current/gbOpen/LKA/ADM2/"
-api_data <- jsonlite::fromJSON(api_url)
 
-# Download and fiercely standardize the shapefile names
-sl_sf <- read_sf(api_data$simplifiedGeometryGeoJSON) |>
+data("district", package = "ceylon")
+
+# Standardize the ceylon shapefile names AND transform to Leaflet's CRS (4326)
+sl_sf <- district |>
+  st_transform(4326) |>
   rename_with(tolower) |>
+  rename(shapename = district) |>
   mutate(
     shapename_disp = str_to_title(shapename), 
     join_name = str_to_lower(str_replace_all(shapename, "[^a-zA-Z]", "")),
@@ -128,7 +114,7 @@ grid <- expand_grid(
   year      = na.omit(unique(map_data_clean$year))
 )
 
-# FIXED: Joined by BOTH join_name and year so it doesn't break the columns
+# Join the tables properly by BOTH name and year so the map data aligns
 map_data_full <- grid |>
   left_join(map_data_clean, by = c("join_name", "year")) |>
   mutate(annual_cases = replace_na(annual_cases, 0))
@@ -405,7 +391,7 @@ p_interactive |>
 ### Map by Year
 
 ```{r}
-#| title: "Annual Dengue Cases by District (Filled)"
+#| title: "Annual Dengue Cases by Health District (Filled)"
 #| message: false
 #| warning: false
 
@@ -454,56 +440,6 @@ m_poly |>
   addLegend(
     pal      = pal_poly,
     values   = c(0, max_cases_poly),
-    title    = "Annual Cases",
-    position = "bottomleft"
-  )
-```
-
-### Map by Year (with kalmunei as well)
-
-```{r}
-#| title: "Annual Dengue Cases by Health District"
-#| message: false
-#| warning: false
-
-max_cases_pt  <- max(yearly_map_data$annual_cases, na.rm = TRUE)
-pal_pt        <- colorNumeric(palette = "Reds", domain = c(0, max_cases_pt))
-years_list_pt <- sort(unique(yearly_map_data$year))
-
-m_pt <- leaflet() |>
-  addProviderTiles("CartoDB.Positron") |>
-  setView(lng = 80.7, lat = 7.8, zoom = 7)
-
-for (yr in years_list_pt) {
-  d_pt <- yearly_map_data |> filter(year == yr)
-  m_pt <- m_pt |>
-    addCircleMarkers(
-      data        = d_pt,
-      lng         = ~lon,
-      lat         = ~lat,
-      radius      = ~pmax(sqrt(annual_cases) / 4, 3),
-      color       = ~pal_pt(annual_cases),
-      fillColor   = ~pal_pt(annual_cases),
-      fillOpacity = 0.85,
-      opacity     = 1,
-      popup       = ~paste0(
-        "<b>District:</b> ", district, "<br>",
-        "<b>Year:</b> ", year, "<br>",
-        "<b>Annual Cases:</b> ", format(annual_cases, big.mark = ",")
-      ),
-      label = ~district,
-      group = as.character(yr)
-    )
-}
-
-m_pt |>
-  addLayersControl(
-    baseGroups = as.character(years_list_pt),
-    options    = layersControlOptions(collapsed = FALSE)
-  ) |>
-  addLegend(
-    pal      = pal_pt,
-    values   = c(0, max_cases_pt),
     title    = "Annual Cases",
     position = "bottomleft"
   )
