@@ -142,10 +142,9 @@ This dashboard provides an interactive exploration of weekly dengue surveillance
 
 - **Overview** provides a summary of the national dengue situation and key surveillance indicators.
 - **National Trends** displays long-term patterns in dengue incidence and compares annual case burdens across high-incidence districts.
-- **Interactive Trends** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector, with a zoomable range slider for fine-grained time navigation.
 - **Trend & Seasonality** presents an STL decomposition that separates observed dengue incidence into long-term trend, recurring seasonal patterns, and irregular variation.
-- **Map by Year** visualizes the geographic distribution of annual dengue cases across Sri Lanka.
-- **Annual Case Matrix** A heatmap of how the dengue cases spread across the years in Sri Lanka.
+- **District Explorer** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector, with a zoomable range slider for fine-grained time navigation.
+- **Spatial Distribution** visualizes the geographic distribution of annual dengue cases across Sri Lanka & a heatmap of how the dengue cases spread across the years in Sri Lanka.
 - **Serotypes** shows the historical circulation of dengue virus serotypes reported in Sri Lanka.
 - **Data** provides access to the surveillance records and serotype data used throughout the dashboard.
 
@@ -213,7 +212,63 @@ annual_district |>
   config(responsive = TRUE)
 ```
 
-# Interactive Trends
+
+# Trend & Seasonality
+
+## Row {height="10%"}
+
+STL (Seasonal-Trend decomposition using Loess) separates the observed dengue case series into three components: a long-term trend, recurring seasonal patterns, and an irregular remainder. This helps identify underlying transmission patterns that may not be immediately visible in the raw data.
+
+## Row {height="90%"}
+
+```{r}
+#| title: "STL Decomposition — National Weekly Cases"
+#| message: false
+#| warning: false
+
+dcmp <- sl_ts |>
+  model(STL(cases ~ season(period = 52), robust = TRUE)) |>
+  components()
+
+p_dcmp_data <- dcmp |>
+  as_tibble() |>
+  mutate(
+    plot_date = as.Date(year_week),
+    epi_week  = paste0(year(plot_date), " - Week ", sprintf("%02d", isoweek(plot_date)))
+  ) |>
+  pivot_longer(
+    cols      = c(cases, trend, season_52, remainder), 
+    names_to  = "component",
+    values_to = "value"
+  ) |>
+  mutate(component = factor(
+    component,
+    levels = c("cases", "trend", "season_52", "remainder"), 
+    labels = c("Observed", "Trend", "Seasonal", "Remainder")
+  ))
+
+p_dcmp <- ggplot(p_dcmp_data, aes(
+    x = plot_date, 
+    y = value, 
+    group = 1,  
+    text = paste0(
+      "<b>", component, "</b><br>",
+      epi_week, "<br>",
+      "Value: ", round(value, 1)
+  ))) +
+  geom_line(colour = "#2980b9", linewidth = 0.5) +
+  facet_wrap(~component, ncol = 1, scales = "free_y") +
+  labs(x = "Timeline (Epi Weeks)", y = "Weekly Cases") +
+  theme_bw(base_size = 10) +
+  theme(strip.text = element_text(face = "bold"))
+
+ggplotly(p_dcmp, tooltip = "text") |>
+  layout(
+    margin = list(t = 20),
+    xaxis  = list(tickformat = "%Y - Week %V")
+  )
+```
+# District Explorer
 
 ## Row
 
@@ -289,63 +344,11 @@ p_interactive |>
   )
 ```
 
-# Trend & Seasonality
+# Spatial Distribution
 
-## Row {height="10%"}
+## Row {.tabset}
 
-STL (Seasonal-Trend decomposition using Loess) separates the observed dengue case series into three components: a long-term trend, recurring seasonal patterns, and an irregular remainder. This helps identify underlying transmission patterns that may not be immediately visible in the raw data.
-
-## Row {height="90%"}
-
-```{r}
-#| title: "STL Decomposition — National Weekly Cases"
-#| message: false
-#| warning: false
-
-dcmp <- sl_ts |>
-  model(STL(cases ~ season(period = 52), robust = TRUE)) |>
-  components()
-
-p_dcmp_data <- dcmp |>
-  as_tibble() |>
-  mutate(
-    plot_date = as.Date(year_week),
-    epi_week  = paste0(year(plot_date), " - Week ", sprintf("%02d", isoweek(plot_date)))
-  ) |>
-  pivot_longer(
-    cols      = c(cases, trend, season_52, remainder), 
-    names_to  = "component",
-    values_to = "value"
-  ) |>
-  mutate(component = factor(
-    component,
-    levels = c("cases", "trend", "season_52", "remainder"), 
-    labels = c("Observed", "Trend", "Seasonal", "Remainder")
-  ))
-
-p_dcmp <- ggplot(p_dcmp_data, aes(
-    x = plot_date, 
-    y = value, 
-    group = 1,  
-    text = paste0(
-      "<b>", component, "</b><br>",
-      epi_week, "<br>",
-      "Value: ", round(value, 1)
-  ))) +
-  geom_line(colour = "#2980b9", linewidth = 0.5) +
-  facet_wrap(~component, ncol = 1, scales = "free_y") +
-  labs(x = "Timeline (Epi Weeks)", y = "Weekly Cases") +
-  theme_bw(base_size = 10) +
-  theme(strip.text = element_text(face = "bold"))
-
-ggplotly(p_dcmp, tooltip = "text") |>
-  layout(
-    margin = list(t = 20),
-    xaxis  = list(tickformat = "%Y - Week %V")
-  )
-```
-
-# Map by Year
+### Map by Year
 
 ```{r}
 #| title: "Annual Dengue Cases by District"
@@ -395,7 +398,7 @@ m |>
   )
 ```
 
-# Annual Case Matrix
+### Annual Case Heatmap per District
 
 ```{r}
 #| title: "District × Year Case Intensity"
@@ -434,7 +437,7 @@ ggplotly(p_matrix, tooltip = "text") |>
 
 # Serotypes
 
-## Row {height="100%"}
+## Row {height="60%"}
 
 ```{r}
 #| title: "Circulating Dengue Serotypes by Year (Presence Matrix)"
@@ -457,7 +460,7 @@ p_sero <- sl_dengue_serotype |>
   labs(x = "Reporting Year", y = "Identified Serotype") +
   theme_minimal(base_size = 12) +
   theme(
-    legend.position = "none",
+    legend.position  = "none",
     panel.grid.minor = element_blank()
   )
 
@@ -465,6 +468,32 @@ ggplotly(p_sero, tooltip = "text") |>
   layout(margin = list(l = 80))
 ```
 
+## Row {height="40%"}
+
+```{r}
+#| title: "Total Years Each Serotype Was Detected"
+#| message: false
+#| warning: false
+
+sl_dengue_serotype |>
+  separate_rows(dengue.serotype, sep = ",\\s*") |>
+  count(dengue.serotype, name = "years_detected") |>
+  mutate(dengue.serotype = reorder(dengue.serotype, years_detected)) |>
+  plot_ly(
+    x           = ~years_detected,
+    y           = ~dengue.serotype,
+    type        = "bar",
+    orientation = "h",
+    marker      = list(color = "#e74c3c"),
+    text        = ~paste0("<b>", dengue.serotype, "</b><br>Detected in ", years_detected, " year(s)"),
+    hoverinfo   = "text"
+  ) |>
+  layout(
+    xaxis  = list(title = "Number of Years Detected", dtick = 1),
+    yaxis  = list(title = ""),
+    margin = list(l = 80)
+  )
+```
 # Data
 
 ## Row {.tabset}
