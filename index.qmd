@@ -187,7 +187,7 @@ serotype_count <- sl_dengue_serotype |>
   nrow()
 
 list(
-  title = "Serotypes Identified (As of 2017)",
+  title = "Serotypes Identified (As of 2017 including genetic variations)",
   icon  = "virus2",
   color = "secondary",
   value = serotype_count
