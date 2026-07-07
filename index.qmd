@@ -206,8 +206,8 @@ Dengue is a mosquito-borne viral disease transmitted primarily by *Aedes aegypti
 
 - **National Trends** displays long-term dengue trends and compares annual case counts across high-incidence districts.
 - **Trend & Seasonality** presents an STL decomposition of dengue incidence into trend, seasonal, and irregular components.
-- **District Explorer** allows users to explore weekly dengue trends for individual districts using an interactive selector and time range slider.
-- **Spatial Distribution** visualizes the geographic distribution of annual dengue cases and a heatmap of district-level case patterns over time.
+- **District Explorer** allows users to explore weekly dengue trends for individual districts using an interactive selector and time range slider, and a heatmap of district-level case patterns over time.
+- **Spatial Distribution** visualizes the geographic distribution of annual dengue cases. 
 - **Serotypes** presents the historical circulation of dengue virus serotypes reported in Sri Lanka.
 - **Data** provides the surveillance and serotype datasets used throughout the dashboard.
 
@@ -252,7 +252,7 @@ p_nat
 ### Column {width="50%"}
 
 ```{r}
-#| title: "Annual Reported Cases — Top 10 Highest-Burden Districts"
+#| title: "Annual Reported Cases of the top 10 Highest-Burden Districts"
 #| message: false
 #| warning: false
 
@@ -261,7 +261,7 @@ base_pal <- c("#185FA5", "#378ADD", "#0F6E56", "#1D9E75", "#534AB7",
               "#7F77DD", "#5F5E5A", "#888780", "#993C1D", "#D85A30")
 pal <- if (n_dist <= length(base_pal)) base_pal[seq_len(n_dist)] else colorRampPalette(base_pal)(n_dist)
 
-annual_district |>
+p_top10 <- annual_district |>
   filter(district %in% top10) |>
   mutate(district = factor(district, levels = top10)) |>
   plot_ly(
@@ -282,7 +282,53 @@ annual_district |>
     legend = list(orientation = "h", x = 0, y = -0.3, font = list(size = 9)),
     hovermode = "closest",
     margin = list(b = 100)
+  ) |>
+  htmlwidgets::onRender("
+    function(el, x) {
+      var clickTimer = null;
+      var clickDelay = 300;
+
+      el.on('plotly_legendclick', function(data) {
+        var curveNumber = data.curveNumber;
+
+        if (clickTimer) {
+          clearTimeout(clickTimer);
+          clickTimer = null;
+
+          var alreadyIsolated = el.data.every(function(trace, i) {
+            return i === curveNumber
+              ? trace.visible === undefined || trace.visible === true
+              : trace.visible === 'legendonly';
+          });
+
+          var newVisibility = el.data.map(function(trace, i) {
+            return alreadyIsolated ? true : (i === curveNumber ? true : 'legendonly');
+          });
+
+          Plotly.restyle(el, {visible: newVisibility});
+        } else {
+          clickTimer = setTimeout(function() {
+            clickTimer = null;
+            var trace = el.data[curveNumber];
+            var isVisible = trace.visible === undefined || trace.visible === true;
+            Plotly.restyle(el, {visible: isVisible ? 'legendonly' : true}, [curveNumber]);
+          }, clickDelay);
+        }
+
+        return false;
+      });
+    }
+  ")
+
+htmltools::browsable(
+  htmltools::tagList(
+    p_top10,
+    htmltools::tags$p(
+      "💡 Click a district name in the legend to show/hide it & double-click to isolate it, double-click again to reset.",
+      style = "text-align:center; font-size:0.7rem; color:var(--dhd-muted); margin-top:2px; margin-bottom:0;"
+    )
   )
+)
 ```
 
 
@@ -295,7 +341,7 @@ STL (Seasonal-Trend decomposition using Loess) separates the observed dengue cas
 ## Row {height="90%"}
 
 ```{r}
-#| title: "STL Decomposition — National Reported Weekly Cases"
+#| title: "STL Decomposition of the National Reported Weekly Cases"
 #| message: false
 #| warning: false
 
@@ -344,7 +390,9 @@ ggplotly(p_dcmp, tooltip = "text") |>
 
 # District Explorer
 
-## Row
+## Row {.tabset}
+
+### Case Timeline by District
 
 ```{r}
 #| title: "Weekly Reported Dengue Cases by District"
@@ -422,11 +470,47 @@ p_interactive |>
   )
 ```
 
+### Annual Case Heatmap per District
+
+```{r}
+#| title: "District × Year Case Intensity"
+p_matrix <- ggplot(
+  annual_district,
+  aes(
+    x    = year,
+    y    = reorder(district, annual_cases, sum),
+    fill = annual_cases,
+    text = paste0(
+      "<b>", district, "</b><br>",
+      "Year: ", year, "<br>",
+      "Cases: ", format(annual_cases, big.mark = ",")
+    )
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  scale_fill_distiller(
+    palette   = "Blues",
+    direction = 1,
+    name      = "Cases",
+    labels    = scales::comma
+  ) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  labs(x = "Reporting Year", y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.y     = element_text(size = 9),
+    axis.text.x     = element_text(size = 9),
+    legend.position = "right"
+  )
+
+ggplotly(p_matrix, tooltip = "text") |>
+  layout(margin = list(l = 110, r = 20, t = 20, b = 50))
+```
+
 # Spatial Distribution
 
-## Row {.tabset}
 
-### Map by Year
+## Row
 
 ```{r}
 #| title: "Annual Reported Dengue Cases by Health District"
@@ -483,42 +567,6 @@ m_poly |>
   )
 ```
 
-### Annual Case Heatmap per District
-
-```{r}
-#| title: "District × Year Case Intensity"
-p_matrix <- ggplot(
-  annual_district,
-  aes(
-    x    = year,
-    y    = reorder(district, annual_cases, sum),
-    fill = annual_cases,
-    text = paste0(
-      "<b>", district, "</b><br>",
-      "Year: ", year, "<br>",
-      "Cases: ", format(annual_cases, big.mark = ",")
-    )
-  )
-) +
-  geom_tile(color = "white", linewidth = 0.1) +
-  scale_fill_distiller(
-    palette   = "Blues",
-    direction = 1,
-    name      = "Cases",
-    labels    = scales::comma
-  ) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  labs(x = "Reporting Year", y = NULL) +
-  theme_minimal(base_size = 11) +
-  theme(
-    axis.text.y     = element_text(size = 9),
-    axis.text.x     = element_text(size = 9),
-    legend.position = "right"
-  )
-
-ggplotly(p_matrix, tooltip = "text") |>
-  layout(margin = list(l = 110, r = 20, t = 20, b = 50))
-```
 
 # Serotypes
 
