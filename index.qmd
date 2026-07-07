@@ -5,6 +5,7 @@ format:
   dashboard:
     theme: flatly
     css: custom.css
+    logo: icon.png
 include-in-header:
   text: '<link rel="icon" type="image/png" href="icon.png?v=2">'
 resources:
@@ -53,6 +54,11 @@ sl <- srilanka_weekly_data |>
   mutate(epi_week = paste0(year(start.date), " - Week ", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
+# Merge Kalmune into Ampara at the source, once, so every downstream
+# table (top10, District Explorer, the map) is counting the same districts
+sl <- sl |>
+  mutate(district = if_else(district == "Kalmune", "Ampara", district))
+
 sl_total <- sl |>
   group_by(start.date) |>
   summarise(
@@ -99,11 +105,10 @@ sl_sf <- sl_sf |>
   ms_simplify(keep = 0.05, keep_shapes = TRUE)
 
 # Standardize the dengue data names exactly the same way
+# (Kalmune is already merged into Ampara upstream, so no fixup needed here)
 map_data_clean <- annual_district |>
   mutate(
-    district_clean = as.character(district),
-    district_clean = if_else(district_clean == "Kalmune", "Ampara", district_clean),
-    join_name = str_to_lower(str_replace_all(district_clean, "[^a-zA-Z]", "")),
+    join_name = str_to_lower(str_replace_all(district, "[^a-zA-Z]", "")),
     join_name = case_when(
       join_name == "mullaittivu" ~ "mullaitivu",
       join_name == "hambanthota" ~ "hambantota",
@@ -140,7 +145,7 @@ sl_ts <- sl_total |>
 
 # Overview
 
-## Row {height="25%"}
+## Row {height="30%"}
 
 ```{r}
 #| content: valuebox
@@ -173,35 +178,54 @@ list(
 )
 ```
 
-## Row {height="75%"}
+```{r}
+#| content: valuebox
 
-### Column {width="100%"}
+serotype_count <- sl_dengue_serotype |>
+  separate_rows(dengue.serotype, sep = ",\\s*") |>
+  distinct(dengue.serotype) |>
+  nrow()
 
-#### About Dengue and This Dashboard
+list(
+  title = "Serotypes Identified (As of 2017)",
+  icon  = "virus2",
+  color = "secondary",
+  value = serotype_count
+)
+```
 
-Dengue is a mosquito-borne viral disease transmitted primarily by *Aedes aegypti* mosquitoes. Infection can cause symptoms ranging from mild fever and headache to more severe complications that may require hospitalization. As dengue remains a major public health concern in Sri Lanka, continuous surveillance is important for identifying outbreaks, monitoring transmission patterns, and supporting public health interventions.
+## Row {height="70%"}
 
-This dashboard provides an interactive exploration of weekly dengue surveillance data reported across Sri Lanka through the `denguedatahub` package. The visualizations allow users to examine national trends, compare districts, investigate seasonal patterns, explore geographic variation, and review historical dengue serotype information.
+### Column {width="62%"}
 
-#### How to Use the Dashboard
+::: {.card title="About This Dashboard"}
 
-- **Overview** provides a summary of the national dengue situation and key surveillance indicators.
-- **National Trends** displays long-term patterns in dengue incidence and compares annual case burdens across high-incidence districts.
-- **Trend & Seasonality** presents an STL decomposition that separates observed dengue incidence into long-term trend, recurring seasonal patterns, and irregular variation.
-- **District Explorer** allows users to explore weekly dengue trajectories for individual districts using a dropdown selector, with a zoomable range slider for fine-grained time navigation.
-- **Spatial Distribution** visualizes the geographic distribution of annual dengue cases across Sri Lanka & a heatmap of how the dengue cases spread across the years in Sri Lanka.
-- **Serotypes** shows the historical circulation of dengue virus serotypes reported in Sri Lanka.
-- **Data** provides access to the surveillance records and serotype data used throughout the dashboard.
+Dengue is a mosquito-borne viral disease transmitted primarily by *Aedes aegypti* mosquitoes and remains a major public health concern in Sri Lanka. This dashboard explores Sri Lanka's weekly dengue surveillance data from the `denguedatahub` R package, developed by Dr. Thiyanga Talagala and collaborators.
 
-#### Data Source
+**This Dashboard Consists**
 
-Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga Talagala and collaborators.
+- **National Trends** displays long-term dengue trends and compares annual case counts across high-incidence districts.
+- **Trend & Seasonality** presents an STL decomposition of dengue incidence into trend, seasonal, and irregular components.
+- **District Explorer** allows users to explore weekly dengue trends for individual districts using an interactive selector and time range slider.
+- **Spatial Distribution** visualizes the geographic distribution of annual dengue cases and a heatmap of district-level case patterns over time.
+- **Serotypes** presents the historical circulation of dengue virus serotypes reported in Sri Lanka.
+- **Data** provides the surveillance and serotype datasets used throughout the dashboard.
 
-<br>
+:::
 
-<div style="text-align: center; padding: 15px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e9ecef;">
-  <img src="Aedes_aegypti_feeding.jpg" style="max-width: 100%; max-height: 400px; height: auto; border-radius: 4px;">
+### Column {width="38%"}
+
+::: {.card title="Aedes aegypti" expandable=false}
+
+<div style="display:flex; align-items:center; justify-content:center; height:80%; background:#eef2f7; border-radius:8px;">
+  <img src="Aedes_aegypti_feeding.jpg" style="max-width:90%; max-height:260px; object-fit:contain; border-radius:6px;">
 </div>
+
+<p style="text-align:center; font-size:0.85rem; color:var(--dhd-muted); margin-top:8px;">
+Primary vector for dengue transmission.
+</p>
+
+:::
 
 # National Trends
 
@@ -212,8 +236,8 @@ Data are obtained from the `denguedatahub` R package, developed by Dr. Thiyanga 
 ```{r}
 #| title: "National Weekly Reported Cases"
 p_nat <- plot_ly(sl_total, x = ~start.date, y = ~cases, type = 'scatter', mode = 'lines',
-                 line = list(color = "#c0392b", width = 1.5),
-                 fill = 'tozeroy', fillcolor = 'rgba(192, 57, 43, 0.12)',
+                 line = list(color = "#2f6dd5", width = 1.5),
+                 fill = 'tozeroy', fillcolor = 'rgba(47, 109, 213, 0.12)',
                  text = ~paste("<b>National Total</b><br>", epi_week, "<br>Cases: ", format(cases, big.mark = ",")),
                  hoverinfo = "text") |>
   layout(
@@ -233,7 +257,9 @@ p_nat
 #| warning: false
 
 n_dist <- length(top10)
-pal <- colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(n_dist)
+base_pal <- c("#185FA5", "#378ADD", "#0F6E56", "#1D9E75", "#534AB7", 
+              "#7F77DD", "#5F5E5A", "#888780", "#993C1D", "#D85A30")
+pal <- if (n_dist <= length(base_pal)) base_pal[seq_len(n_dist)] else colorRampPalette(base_pal)(n_dist)
 
 annual_district |>
   filter(district %in% top10) |>
@@ -303,7 +329,7 @@ p_dcmp <- ggplot(p_dcmp_data, aes(
       epi_week, "<br>",
       "Value: ", round(value, 1)
     ))) +
-  geom_line(colour = "#2980b9", linewidth = 0.5) +
+  geom_line(colour = "#2f6dd5", linewidth = 0.5) +
   facet_wrap(~component, ncol = 1, scales = "free_y") +
   labs(x = "Timeline (Epi Weeks)", y = "Weekly Cases") +
   theme_bw(base_size = 10) +
@@ -340,7 +366,7 @@ traces <- lapply(seq_along(districts), function(i) {
       "Cases: ", d$cases
     ),
     hoverinfo = "text",
-    line      = list(color = "#2980b9", width = 1.2)
+    line      = list(color = "#2f6dd5", width = 1.2)
   )
 })
 
@@ -370,7 +396,7 @@ p_interactive |>
       buttons = buttons,
       x       = 0,
       xanchor = "left",
-      y       = 1.15,
+      y       = 1.3,
       yanchor = "top"
     )),
     xaxis = list(
@@ -378,6 +404,10 @@ p_interactive |>
       tickformat = "%Y - Week %V",
       rangeslider = list(visible = TRUE),
       rangeselector = list(
+          x = 0,
+        xanchor = "left",
+        y = 1.05,
+        yanchor = "top",
         buttons = list(
           list(count = 1, label = "1y", step = "year", stepmode = "backward"),
           list(count = 3, label = "3y", step = "year", stepmode = "backward"),
@@ -388,7 +418,7 @@ p_interactive |>
     ),
     yaxis      = list(title = "Weekly Cases", tickformat = ","),
     showlegend = FALSE,
-    margin     = list(t = 110)
+    margin     = list(t = 160)
   )
 ```
 
@@ -472,7 +502,7 @@ p_matrix <- ggplot(
 ) +
   geom_tile(color = "white", linewidth = 0.1) +
   scale_fill_distiller(
-    palette   = "YlOrRd",
+    palette   = "Blues",
     direction = 1,
     name      = "Cases",
     labels    = scales::comma
@@ -509,7 +539,7 @@ p_sero <- sl_dengue_serotype |>
     text = paste0("<b>", dengue.serotype, "</b><br>Detected in Year: ", reporting.year)
   )) +
   geom_tile(color = "white", linewidth = 0.5) +
-  scale_fill_manual(values = c("Detected" = "#e74c3c")) +
+  scale_fill_manual(values = c("Detected" = "#993C1D")) +
   scale_x_continuous(breaks = seq(min(sl_dengue_serotype$reporting.year), 
                                   max(sl_dengue_serotype$reporting.year), by = 2)) +
   labs(x = "Reporting Year", y = "Identified Serotype") +
@@ -539,7 +569,7 @@ sl_dengue_serotype |>
     y           = ~dengue.serotype,
     type        = "bar",
     orientation = "h",
-    marker      = list(color = "#e74c3c"),
+    marker      = list(color = "#993C1D"),
     text        = ~paste0("<b>", dengue.serotype, "</b><br>Detected in ", years_detected, " year(s)"),
     hoverinfo   = "text"
   ) |>

@@ -7,6 +7,7 @@
   --dhd-muted: #5c667a;
   --dhd-border: #e6e9ef;
   --dhd-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+  --dhd-shadow-hover: 0 14px 32px rgba(17, 24, 39, 0.14);
 }
 
 body.quarto-dashboard {
@@ -23,7 +24,8 @@ h1, h2, h3, h4, h5, h6,
 
 #quarto-dashboard-header .navbar {
   background: var(--dhd-navy) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 
 #quarto-dashboard-header .navbar .navbar-title-text a,
@@ -47,24 +49,34 @@ h1, h2, h3, h4, h5, h6,
   color: #ffffff !important;
 }
 
+/* More breathing room between cards/rows */
+.quarto-dashboard .bslib-grid {
+  gap: 1.25rem !important;
+}
+
 .quarto-dashboard .bslib-card {
   background: #ffffff;
   border: 1px solid var(--dhd-border);
   border-radius: 12px;
   box-shadow: var(--dhd-shadow);
   overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.quarto-dashboard .bslib-card:hover {
+  box-shadow: var(--dhd-shadow-hover);
+  transform: translateY(-2px);
 }
 
 .quarto-dashboard .bslib-value-box {
-  background: #ffffff !important;
   border-radius: 8px !important;
   box-shadow: 0 6px 20px rgba(17, 24, 39, 0.08);
-  color: var(--dhd-text) !important;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.quarto-dashboard .bslib-value-box .value-box-value,
-.quarto-dashboard .bslib-value-box .value-box-title {
-  color: var(--dhd-text) !important;
+.quarto-dashboard .bslib-value-box:hover {
+  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.16);
+  transform: translateY(-2px);
 }
 
 .quarto-dashboard .bslib-value-box .value-box-value {
@@ -72,13 +84,42 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .quarto-dashboard .bslib-value-box .value-box-showcase .bi {
-  color: #2f6dd5;
   font-size: 2.4rem;
 }
 
-.quarto-dashboard .bslib-value-box.bg-danger { border-top: 4px solid #dc3545; }
-.quarto-dashboard .bslib-value-box.bg-warning { border-top: 4px solid #e0a800; }
-.quarto-dashboard .bslib-value-box.bg-info { border-top: 4px solid #0ea5e9; }
+/* Value box background colors */
+.quarto-dashboard .bslib-value-box.bg-danger {
+  background: #c0392b !important;
+}
+.quarto-dashboard .bslib-value-box.bg-warning {
+  background: #c6821f !important;
+}
+.quarto-dashboard .bslib-value-box.bg-info {
+  background: #2f6dd5 !important;
+}
+.quarto-dashboard .bslib-value-box.bg-secondary {
+  background: #5c667a !important;
+}
+
+/* Icons stay white on all four colored boxes */
+.quarto-dashboard .bslib-value-box.bg-danger .value-box-showcase .bi,
+.quarto-dashboard .bslib-value-box.bg-warning .value-box-showcase .bi,
+.quarto-dashboard .bslib-value-box.bg-info .value-box-showcase .bi,
+.quarto-dashboard .bslib-value-box.bg-secondary .value-box-showcase .bi {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Navy text on all four colored boxes */
+.quarto-dashboard .bslib-value-box.bg-danger .value-box-value,
+.quarto-dashboard .bslib-value-box.bg-danger .value-box-title,
+.quarto-dashboard .bslib-value-box.bg-warning .value-box-value,
+.quarto-dashboard .bslib-value-box.bg-warning .value-box-title,
+.quarto-dashboard .bslib-value-box.bg-info .value-box-value,
+.quarto-dashboard .bslib-value-box.bg-info .value-box-title,
+.quarto-dashboard .bslib-value-box.bg-secondary .value-box-value,
+.quarto-dashboard .bslib-value-box.bg-secondary .value-box-title {
+  color: var(--dhd-text) !important;
+}
 
 .quarto-dashboard [data-icon="calendar-week"] .value-box-showcase .bi-calendar-week::before {
   content: "📅";
@@ -103,6 +144,7 @@ h1, h2, h3, h4, h5, h6,
   color: var(--dhd-muted);
   font-weight: 600;
   padding: 0.7rem 0.25rem;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
 .quarto-dashboard .card.tabset .nav-tabs .nav-link.active,
@@ -122,12 +164,10 @@ h1, h2, h3, h4, h5, h6,
 }
 
 #overview img[src*="Aedes_aegypti"] {
-  background: #e8edf5;
-  border-radius: 8px !important;
   display: block;
-  max-height: 250px !important;
-  object-fit: cover;
-  width: 100% !important;
+  max-height: 260px;
+  object-fit: contain;
+  border-radius: 6px;
 }
 
 table.dataTable tbody tr:nth-child(odd) {
@@ -140,6 +180,49 @@ table.dataTable tbody tr:nth-child(even) {
 
 table.dataTable tbody tr:hover {
   background: #e8eef8 !important;
+}
+
+/* Modern styling for the Copy/CSV/Excel buttons on data tables */
+.dt-button,
+.dt-buttons .btn {
+  background: #ffffff !important;
+  border: 1px solid var(--dhd-border) !important;
+  border-radius: 6px !important;
+  color: var(--dhd-text) !important;
+  font-weight: 500;
+  padding: 6px 14px !important;
+  box-shadow: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dt-button:hover,
+.dt-buttons .btn:hover {
+  background: #f4f7fb !important;
+  border-color: #2f6dd5 !important;
+  color: #2f6dd5 !important;
+}
+
+/* Nicer column filter boxes on data tables */
+table.dataTable thead input,
+table.dataTable thead select {
+  border-radius: 6px !important;
+  border: 1px solid var(--dhd-border) !important;
+}
+
+/* Thin, modern scrollbars (Chrome/Edge/Safari only, harmless elsewhere) */
+.quarto-dashboard ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.quarto-dashboard ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.quarto-dashboard ::-webkit-scrollbar-thumb {
+  background: #c7ccd6;
+  border-radius: 8px;
+}
+.quarto-dashboard ::-webkit-scrollbar-thumb:hover {
+  background: #a9afbb;
 }
 
 @media (max-width: 1280px) {
