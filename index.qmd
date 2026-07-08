@@ -393,12 +393,10 @@ ggplotly(p_dcmp, tooltip = "text") |>
 ## Row {.tabset}
 
 ### Case Timeline by District
-
 ```{r}
 #| title: "Weekly Reported Dengue Cases by District"
 #| message: false
 #| warning: false
-
 traces <- lapply(seq_along(districts), function(i) {
   d <- sl |> filter(district == districts[i])
   list(
@@ -417,7 +415,6 @@ traces <- lapply(seq_along(districts), function(i) {
     line      = list(color = "#2f6dd5", width = 1.2)
   )
 })
-
 buttons <- lapply(seq_along(districts), function(i) {
   vis    <- rep(FALSE, length(districts))
   vis[i] <- TRUE
@@ -427,7 +424,6 @@ buttons <- lapply(seq_along(districts), function(i) {
     label  = districts[i]
   )
 })
-
 p_interactive <- plot_ly()
 for (tr in traces) {
   p_interactive <- add_trace(
@@ -435,7 +431,6 @@ for (tr in traces) {
     name = tr$name, visible = tr$visible, text = tr$text, hoverinfo = tr$hoverinfo, line = tr$line
   )
 }
-
 p_interactive |>
   layout(
     updatemenus = list(list(
@@ -449,7 +444,7 @@ p_interactive |>
     )),
     xaxis = list(
       title = "Timeline (Epi Weeks)",
-      tickformat = "%Y - Week %V",
+      tickformat = "%G - Week %V",
       rangeslider = list(visible = TRUE),
       rangeselector = list(
           x = 0,
@@ -629,16 +624,12 @@ sl_dengue_serotype |>
 ```
 
 # Data
-
 ## Row {.tabset}
-
 ### Weekly Surveillance Data
-
 ```{r}
 #| title: "Sri Lanka Weekly Dengue Surveillance Records"
 #| message: false
 #| warning: false
-
 sl |>
   select(epi_week, district, cases) |>
   rename(
@@ -653,19 +644,16 @@ sl |>
       pageLength = 15,
       scrollX    = TRUE,
       dom        = "Bfrtip",
-      buttons    = c("copy", "csv", "excel")
+      buttons    = c("csv", "excel")
     ),
     extensions = "Buttons"
   )
 ```
-
 ### Serotype Records
-
 ```{r}
 #| title: "Historical Dengue Serotype Identifications"
 #| message: false
 #| warning: false
-
 sl_dengue_serotype |>
   rename(
     `Reporting Year` = reporting.year,
