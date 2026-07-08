@@ -232,7 +232,6 @@ Primary vector for dengue transmission.
 ## Row
 
 ### Column {width="50%"}
-
 ```{r}
 #| title: "National Weekly Reported Cases"
 p_nat <- plot_ly(sl_total, x = ~start.date, y = ~cases, type = 'scatter', mode = 'lines',
@@ -241,14 +240,12 @@ p_nat <- plot_ly(sl_total, x = ~start.date, y = ~cases, type = 'scatter', mode =
                  text = ~paste("<b>National Total</b><br>", epi_week, "<br>Cases: ", format(cases, big.mark = ",")),
                  hoverinfo = "text") |>
   layout(
-    xaxis = list(title = "Timeline (Epi Weeks)", tickformat = "%Y - Week %V"),
+    xaxis = list(title = "Timeline (Epi Weeks)", tickformat = "%G - Week %V"),
     yaxis = list(title = "Weekly Cases"),
     hovermode = "x unified"
   )
-
 p_nat
 ```
-
 ### Column {width="50%"}
 
 ```{r}
