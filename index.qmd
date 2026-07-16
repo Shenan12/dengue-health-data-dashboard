@@ -54,8 +54,7 @@ sl <- srilanka_weekly_data |>
   mutate(epi_week = paste0(year(start.date), " - Week ", sprintf("%02d", isoweek(start.date)))) |>
   arrange(district, start.date)
 
-# Merge Kalmune into Ampara at the source, once, so every downstream
-# table (top10, District Explorer, the map) is counting the same districts
+# Merge Kalmune into Ampara 
 sl <- sl |>
   mutate(district = if_else(district == "Kalmune", "Ampara", district))
 
@@ -83,7 +82,7 @@ top10 <- annual_district |>
 
 data("district", package = "ceylon")
 
-# Standardize the ceylon shapefile names AND transform to Leaflet's CRS (4326)
+
 sl_sf <- district |>
   st_transform(4326) |>
   rename_with(tolower) |>
@@ -99,13 +98,11 @@ sl_sf <- district |>
     )
   )
 
-# Simplify polygon geometry so it isn't duplicated at full resolution
-# once per year in the leaflet widget (this is what was inflating the file to 376MB)
+
 sl_sf <- sl_sf |>
   ms_simplify(keep = 0.05, keep_shapes = TRUE)
 
-# Standardize the dengue data names exactly the same way
-# (Kalmune is already merged into Ampara upstream, so no fixup needed here)
+
 map_data_clean <- annual_district |>
   mutate(
     join_name = str_to_lower(str_replace_all(district, "[^a-zA-Z]", "")),
@@ -119,18 +116,18 @@ map_data_clean <- annual_district |>
   group_by(join_name, year) |>
   summarise(annual_cases = sum(annual_cases, na.rm = TRUE), .groups = "drop")
 
-# Create the grid so every district has a row for every year
+
 grid <- expand_grid(
   join_name = na.omit(unique(sl_sf$join_name)),
   year      = na.omit(unique(map_data_clean$year))
 )
 
-# Join the tables properly by BOTH name and year so the map data aligns
+
 map_data_full <- grid |>
   left_join(map_data_clean, by = c("join_name", "year")) |>
   mutate(annual_cases = replace_na(annual_cases, 0))
 
-# Join the full data back to the spatial polygons
+
 yearly_map_data_sf <- sl_sf |>
   left_join(map_data_full, by = "join_name") |>
   filter(!is.na(year))
@@ -519,7 +516,7 @@ m_poly <- leaflet() |>
   addProviderTiles("CartoDB.Positron") |>
   setView(lng = 80.7, lat = 7.8, zoom = 7)
 
-# Loop to add each year's data as a separate polygon layer
+
 for (yr in years_list_poly) {
   d_poly <- yearly_map_data_sf |> filter(year == yr)
   m_poly <- m_poly |>
@@ -621,6 +618,15 @@ sl_dengue_serotype |>
 ```
 
 # Data
+## Row {height="15%"}
+
+::: {.card title="References"}
+
+- Talagala T (2026). *denguedatahub: A Tidy Format Datasets of Dengue by Country*. R package version 4.1.1. <https://thiyangt.github.io/denguedatahubweb/>
+- Talagala T (2024). *ceylon: An R package for plotting the maps of Sri Lanka*. arXiv:2401.02467. <https://arxiv.org/abs/2401.02467>
+
+:::
+
 ## Row {.tabset}
 ### Weekly Surveillance Data
 ```{r}
